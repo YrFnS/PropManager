@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Property {
+  id            String   @id @default(cuid())
+  name          String
+  nameAr        String?
+  address       String
+  addressAr     String?
+  city          String
+  cityAr        String?
+  state         String?
+  zipCode       String?
+  description   String?
+  descriptionAr String?
+  type          String   @default("residential") // residential, commercial, mixed
+  totalUnits    Int      @default(0)
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  units         Unit[]
+  manager       PropertyManager?
+  maintenanceRequests MaintenanceRequest[]
+
+  @@index([type])
+  @@index([city])
+}
+
+model PropertyManager {
+  id         String   @id @default(cuid())
+  propertyId String   @unique
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  name       String
+  nameAr     String?
+  email      String
+  phone      String?
+}
+
+model Unit {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unitNumber  String
+  floor       Int?
+  rooms       Int
+  bathrooms   Float    @default(1)
+  area        Float?
+  rentAmount  Float
+  status      String   @default("available") // available, rented, maintenance
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lease       Lease?
+  maintenanceRequests MaintenanceRequest[]
+
+  @@index([propertyId])
+  @@index([status])
+}
+
+model Tenant {
+  id               String   @id @default(cuid())
+  name             String
+  nameAr           String?
+  email            String   @unique
+  phone            String?
+  nationalId       String?
+  emergencyContact String?
+  status           String   @default("active") // active, inactive
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  leases           Lease[]
+  maintenanceRequests MaintenanceRequest[]
+  payments         Payment[]
+
+  @@index([status])
+}
+
+model Lease {
+  id         String   @id @default(cuid())
+  unitId     String   @unique
+  unit       Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  startDate  DateTime
+  endDate    DateTime
+  rentAmount Float
+  deposit    Float?
+  status     String   @default("active") // active, expired, terminated
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  payments   Payment[]
+
+  @@index([tenantId])
+  @@index([status])
+  @@index([endDate])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  leaseId   String
+  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  amount    Float
+  dueDate   DateTime
+  paidDate  DateTime?
+  status    String   @default("pending") // pending, paid, late, partial
+  method    String?  // cash, bank_transfer, online, check
+  reference String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leaseId])
+  @@index([tenantId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model MaintenanceRequest {
+  id            String   @id @default(cuid())
+  propertyId    String
+  property      Property @relation(fields: [propertyId], references: [id])
+  unitId        String?
+  unit          Unit?    @relation(fields: [unitId], references: [id])
+  tenantId      String?
+  tenant        Tenant?  @relation(fields: [tenantId], references: [id])
+  title         String
+  titleAr       String?
+  description   String
+  descriptionAr String?
+  priority      String   @default("medium") // low, medium, high, urgent
+  status        String   @default("open") // open, in_progress, resolved, closed
+  category      String   @default("other") // plumbing, electrical, structural, appliance, hvac, other
+  assignedTo    String?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([propertyId])
+  @@index([status])
+  @@index([priority])
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  senderName  String
+  senderEmail String
+  subject     String
+  content     String
+  isRead      Boolean  @default(false)
+  category    String   @default("general") // general, maintenance, payment, lease, other
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isRead])
+  @@index([category])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  createdAt DateTime @default(now())
+
+  @@index([entity])
+  @@index([createdAt])
+}
