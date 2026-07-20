@@ -218,6 +218,7 @@ export default function PropertyDetailSheet({
               <PropertyImage
                 type={data.type || 'residential'}
                 name={isAr && data.nameAr ? data.nameAr : data.name}
+                image={data.image}
                 className="h-[200px] w-full shrink-0"
               />
               {/* Header */}

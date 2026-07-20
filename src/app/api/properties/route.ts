@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
     const data = parsed.data;
 
     // Sanitize string inputs
-    const { name, nameAr, address, addressAr, city, cityAr, state, zipCode, description, descriptionAr, type, totalUnits, manager } = {
+    const { name, nameAr, address, addressAr, city, cityAr, state, zipCode, description, descriptionAr, image, type, totalUnits, manager } = {
       ...data,
       name: sanitizeString(data.name, 200),
       nameAr: data.nameAr ? sanitizeString(data.nameAr, 200) : null,
@@ -123,6 +123,7 @@ export async function POST(request: NextRequest) {
       zipCode: data.zipCode ? sanitizeString(data.zipCode, 20) : null,
       description: data.description ? sanitizeString(data.description, 2000) : null,
       descriptionAr: data.descriptionAr ? sanitizeString(data.descriptionAr, 2000) : null,
+      image: data.image ? sanitizeString(data.image, 2000) : null,
       manager: body.manager,
     };
 
@@ -138,6 +139,7 @@ export async function POST(request: NextRequest) {
         zipCode: zipCode || null,
         description: description || null,
         descriptionAr: descriptionAr || null,
+        image: image || null,
         type: type || 'residential',
         totalUnits: totalUnits || 0,
         manager: manager ? {
@@ -197,6 +199,7 @@ export async function PUT(request: NextRequest) {
       zipCode: data.zipCode ? sanitizeString(data.zipCode, 20) : null,
       description: data.description ? sanitizeString(data.description, 2000) : null,
       descriptionAr: data.descriptionAr ? sanitizeString(data.descriptionAr, 2000) : null,
+      image: data.image ? sanitizeString(data.image, 2000) : null,
       type: data.type || 'residential',
       totalUnits: data.totalUnits !== undefined ? data.totalUnits : undefined,
     };

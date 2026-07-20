@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 interface PropertyImageProps {
   type: 'residential' | 'commercial' | 'mixed';
   name?: string;
+  image?: string | null;
   className?: string;
 }
 
@@ -35,7 +36,7 @@ const TYPE_CONFIG: Record<string, {
   },
 };
 
-export default function PropertyImage({ type, name, className }: PropertyImageProps) {
+export default function PropertyImage({ type, name, image, className }: PropertyImageProps) {
   const config = TYPE_CONFIG[type] || TYPE_CONFIG.residential;
   const { Icon } = config;
 
@@ -47,9 +48,15 @@ export default function PropertyImage({ type, name, className }: PropertyImagePr
         className,
       )}
     >
+      {image && (
+        <>
+          <img src={image} alt={name || 'Property'} className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/5 to-transparent" />
+        </>
+      )}
       {/* Dot pattern overlay */}
       <div
-        className="absolute inset-0"
+        className={cn('absolute inset-0', image && 'hidden')}
         style={{
           backgroundImage: `radial-gradient(circle, ${config.patternColor} 1px, transparent 1px)`,
           backgroundSize: '16px 16px',
@@ -57,7 +64,7 @@ export default function PropertyImage({ type, name, className }: PropertyImagePr
       />
 
       {/* Building icon overlay */}
-      <div className="relative z-10 flex flex-col items-center justify-center gap-2">
+      <div className={cn('relative z-10 flex flex-col items-center justify-center gap-2', image && 'hidden')}>
         <div className={cn('p-3 rounded-2xl', config.iconBg)}>
           <Icon className="h-10 w-10 text-white/80" />
         </div>

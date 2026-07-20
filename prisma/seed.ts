@@ -19,7 +19,7 @@ async function main() {
         descriptionAr: 'أبراج سكنية فاخرة بإطلالات بانورامية',
         type: 'residential',
         totalUnits: 24,
-        image: '/properties/sunset-towers.jpg',
+        image: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1200&q=80',
         manager: {
           create: {
             name: 'Ahmed Al-Rashid',
@@ -44,7 +44,7 @@ async function main() {
         descriptionAr: 'شقق فاخرة على الواجهة البحرية',
         type: 'residential',
         totalUnits: 36,
-        image: '/properties/marina-heights.jpg',
+        image: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1200&q=80',
         manager: {
           create: {
             name: 'Sara Al-Maktoum',
@@ -69,7 +69,7 @@ async function main() {
         descriptionAr: 'مكاتب تجارية حديثة',
         type: 'commercial',
         totalUnits: 18,
-        image: '/properties/business-bay.jpg',
+        image: 'https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=80',
         manager: {
           create: {
             name: 'Mohammed Al-Fahim',
@@ -94,7 +94,7 @@ async function main() {
         descriptionAr: 'سكن حصري على شاطئ البحر',
         type: 'mixed',
         totalUnits: 12,
-        image: '/properties/palm-residence.jpg',
+        image: 'https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?auto=format&fit=crop&w=1200&q=80',
         manager: {
           create: {
             name: 'Fatima Al-Nahyan',
@@ -119,7 +119,7 @@ async function main() {
         descriptionAr: 'مجتمع سكني صديق للعائلات',
         type: 'residential',
         totalUnits: 30,
-        image: '/properties/al-barsha.jpg',
+        image: 'https://images.unsplash.com/photo-1600573472550-8090b5e0745e?auto=format&fit=crop&w=1200&q=80',
         manager: {
           create: {
             name: 'Khalid Al-Mansoor',

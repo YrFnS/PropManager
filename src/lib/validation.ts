@@ -71,6 +71,7 @@ export const propertySchema = z.object({
   zipCode: z.string().max(20).optional(),
   description: z.string().max(2000).optional(),
   descriptionAr: z.string().max(2000).optional(),
+  image: z.string().url().max(2000).optional(),
   type: z.enum(['residential', 'commercial', 'mixed']).optional(),
   totalUnits: z.number().int().min(0).optional(),
 });

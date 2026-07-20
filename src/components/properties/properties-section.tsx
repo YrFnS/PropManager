@@ -204,6 +204,7 @@ export default function PropertiesSection() {
             <PropertyImage
               type={p.type || 'residential'}
               name={isAr && p.nameAr ? p.nameAr : p.name}
+              image={p.image}
               className="h-[120px] rounded-t-xl"
             />
             <CardHeader className="pb-3">
