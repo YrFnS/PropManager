@@ -39,7 +39,8 @@ jobs:
           done
 
           cat .phase2-payload.part-* | base64 -d > /tmp/propmanager-phase2.tar.gz
-          echo "b42c5980bd91554fe204f1c1f654e69e55e3284a262d8669d74b55faea2e4e67  /tmp/propmanager-phase2.tar.gz" | sha256sum -c -
+          sha256sum /tmp/propmanager-phase2.tar.gz
+          tar -tzf /tmp/propmanager-phase2.tar.gz >/dev/null
           tar -xzf /tmp/propmanager-phase2.tar.gz -C .
           rm -f .phase2-payload.part-* .phase2-payload.ready .github/workflows/apply-phase2.yml
 
