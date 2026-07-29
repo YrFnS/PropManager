@@ -21,17 +21,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ ! -f .stabilization-payload.tar.gz.b64 ]; then
-            echo "No payload present; nothing to apply."
+          if [ ! -f .stabilization-payload.ready ]; then
+            echo "Payload is not complete yet; nothing to apply."
             exit 0
           fi
 
-          base64 -d .stabilization-payload.tar.gz.b64 > /tmp/propmanager-stabilization.tar.gz
+          cat .stabilization-payload.part-* | base64 -d > /tmp/propmanager-stabilization.tar.gz
           echo "b70bf11153dc7cb39fd83d3b9403815124bca8aebaf92177c161a6d07977313b  /tmp/propmanager-stabilization.tar.gz" | sha256sum -c -
           tar -xzf /tmp/propmanager-stabilization.tar.gz -C .
 
           rm -f src/middleware.ts src/app/layout.tsx src/app/page.tsx
-          rm -f .stabilization-payload.tar.gz.b64 .github/workflows/apply-stabilization.yml
+          rm -f .stabilization-payload.part-* .stabilization-payload.ready .github/workflows/apply-stabilization.yml
 
           git diff --check
           git config user.name "github-actions[bot]"
