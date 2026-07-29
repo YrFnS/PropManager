@@ -38,7 +38,10 @@ jobs:
             test -f "$part"
           done
 
-          cat .phase2-payload.part-00 .phase2-payload.part-01 .phase2-payload.part-02 .phase2-payload.fixed-{00..10} | base64 -d > /tmp/propmanager-phase2.tar.gz
+          cat .phase2-payload.part-00 .phase2-payload.part-01 .phase2-payload.part-02 .phase2-payload.fixed-{00..10} \
+            | LC_ALL=C tr -cd 'A-Za-z0-9+/=' > /tmp/propmanager-phase2.b64
+          echo "6afea2bdc50ddab9a50d99cf004db594e2998c765d1a0b77e491fe5d4c4ac317  /tmp/propmanager-phase2.b64" | sha256sum -c -
+          base64 -d /tmp/propmanager-phase2.b64 > /tmp/propmanager-phase2.tar.gz
           echo "b42c5980bd91554fe204f1c1f654e69e55e3284a262d8669d74b55faea2e4e67  /tmp/propmanager-phase2.tar.gz" | sha256sum -c -
           tar -tzf /tmp/propmanager-phase2.tar.gz >/dev/null
           tar -xzf /tmp/propmanager-phase2.tar.gz -C .
