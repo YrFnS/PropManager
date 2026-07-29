@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiError, requestRateLimit } from '@/lib/api';
+import { moneyToNumber } from '@/lib/money';
 
 function getPeriodRange(period: string): { startDate: Date | null; endDate: Date | null } {
   const now = new Date();
@@ -176,9 +177,9 @@ export async function GET(request: NextRequest) {
     const latePayments = paymentStatusCounts.find((item) => item.status === 'late')?._count.status ?? 0;
 
     const totalPendingAmount = periodDues.reduce((sum, payment) => {
-      if (payment.status === 'pending' || payment.status === 'late') return sum + payment.amount;
+      if (payment.status === 'pending' || payment.status === 'late') return sum + moneyToNumber(payment.amount);
       if (payment.status === 'partial') {
-        return sum + Math.max(0, Math.max(payment.lease.rentAmount, payment.amount) - payment.amount);
+        return sum + Math.max(0, Math.max(moneyToNumber(payment.lease.rentAmount), moneyToNumber(payment.amount)) - moneyToNumber(payment.amount));
       }
       return sum;
     }, 0);
@@ -188,10 +189,10 @@ export async function GET(request: NextRequest) {
     for (const payment of collectedPayments) {
       if (payment.paidDate) {
         const month = `${payment.paidDate.getFullYear()}-${String(payment.paidDate.getMonth() + 1).padStart(2, '0')}`;
-        revenueByMonth.set(month, (revenueByMonth.get(month) || 0) + payment.amount);
+        revenueByMonth.set(month, (revenueByMonth.get(month) || 0) + moneyToNumber(payment.amount));
       }
       const propertyId = payment.lease.unit.propertyId;
-      revenueByProperty.set(propertyId, (revenueByProperty.get(propertyId) || 0) + payment.amount);
+      revenueByProperty.set(propertyId, (revenueByProperty.get(propertyId) || 0) + moneyToNumber(payment.amount));
     }
 
     const revenueData = Array.from(revenueByMonth, ([month, revenue]) => ({ month, revenue })).sort((a, b) =>
@@ -216,11 +217,11 @@ export async function GET(request: NextRequest) {
         totalTenants,
         activeTenants,
         activeLeases: activeLeaseCount,
-        monthlyRevenue: totalCollected._sum.amount || 0,
+        monthlyRevenue: moneyToNumber(totalCollected._sum.amount),
         pendingPayments,
         latePayments,
         openMaintenance,
-        totalCollected: totalCollected._sum.amount || 0,
+        totalCollected: moneyToNumber(totalCollected._sum.amount),
         totalPendingAmount,
       },
       recentPayments,

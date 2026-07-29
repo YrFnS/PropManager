@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiError, getPagination, requestRateLimit } from '@/lib/api';
 import { auditEntry } from '@/lib/audit';
+import { moneyEquals, moneyToNumber } from '@/lib/money';
 import { paymentSchema, paymentUpdateSchema, sanitizeString } from '@/lib/validation';
 
 const paymentInclude = {
@@ -53,9 +54,9 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json({
       data: payments,
       stats: {
-        totalCollected: totalCollected._sum.amount || 0,
-        totalPending: totalPending._sum.amount || 0,
-        totalLate: totalLate._sum.amount || 0,
+        totalCollected: moneyToNumber(totalCollected._sum.amount),
+        totalPending: moneyToNumber(totalPending._sum.amount),
+        totalLate: moneyToNumber(totalLate._sum.amount),
       },
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
@@ -149,7 +150,7 @@ export async function PUT(request: NextRequest) {
     const status = data.status ?? existing.status;
     const remainsSettled = status === 'paid' || status === 'partial';
     const wasSettled = existing.status === 'paid' || existing.status === 'partial';
-    const changesSettledAmount = data.amount !== undefined && data.amount !== existing.amount;
+    const changesSettledAmount = data.amount !== undefined && !moneyEquals(data.amount, existing.amount);
     const changesSettledDueDate = data.dueDate !== undefined && new Date(data.dueDate).getTime() !== existing.dueDate.getTime();
     if (wasSettled && remainsSettled && (changesSettledAmount || changesSettledDueDate)) {
       return apiError('Move the payment back to a pending status before correcting its amount or due date.', 409);

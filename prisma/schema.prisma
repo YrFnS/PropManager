@@ -108,7 +108,7 @@ model Unit {
   rooms               Int
   bathrooms           Float                @default(1)
   area                Float?
-  rentAmount          Float
+  rentAmount          Decimal              @db.Decimal(18, 2)
   status              String               @default("available")
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
@@ -151,8 +151,8 @@ model Lease {
   tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   startDate      DateTime
   endDate        DateTime
-  rentAmount     Float
-  deposit        Float?
+  rentAmount     Decimal      @db.Decimal(18, 2)
+  deposit        Decimal?     @db.Decimal(18, 2)
   status         String       @default("active")
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -172,7 +172,7 @@ model Payment {
   lease          Lease        @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   tenantId       String
   tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  amount         Float
+  amount         Decimal      @db.Decimal(18, 2)
   dueDate        DateTime
   paidDate       DateTime?
   status         String       @default("pending")

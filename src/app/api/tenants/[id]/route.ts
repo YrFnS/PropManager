@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit } from '@/lib/validation';
+import { moneyToNumber } from '@/lib/money';
 
 export async function GET(
   request: NextRequest,
@@ -59,11 +60,11 @@ export async function GET(
     // Calculate summary stats
     const totalPaid = tenant.payments
       .filter((p) => p.status === 'paid' || p.status === 'partial')
-      .reduce((sum, p) => sum + p.amount, 0);
+      .reduce((sum, p) => sum + moneyToNumber(p.amount), 0);
 
     const totalPending = tenant.payments
       .filter((p) => p.status === 'pending' || p.status === 'late')
-      .reduce((sum, p) => sum + p.amount, 0);
+      .reduce((sum, p) => sum + moneyToNumber(p.amount), 0);
 
     const openMaintenanceCount = tenant.maintenanceRequests.filter(
       (m) => m.status === 'open' || m.status === 'in_progress'

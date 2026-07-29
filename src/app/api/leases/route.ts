@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiError, getPagination, isPrismaError, requestRateLimit } from '@/lib/api';
 import { auditEntry } from '@/lib/audit';
+import { moneyEquals, moneyToNumber } from '@/lib/money';
 import { leaseSchema, leaseUpdateSchema } from '@/lib/validation';
 
 const leaseInclude = {
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
       stats: {
         activeLeases,
         expiringSoon,
-        totalMonthlyRevenue: activeRevenue._sum.rentAmount || 0,
+        totalMonthlyRevenue: moneyToNumber(activeRevenue._sum.rentAmount),
       },
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
@@ -163,8 +164,8 @@ export async function PUT(request: NextRequest) {
         (data.unitId !== undefined && data.unitId !== existing.unitId) ||
         (data.tenantId !== undefined && data.tenantId !== existing.tenantId) ||
         (data.startDate !== undefined && new Date(data.startDate).getTime() !== existing.startDate.getTime()) ||
-        (data.rentAmount !== undefined && data.rentAmount !== existing.rentAmount) ||
-        (data.deposit !== undefined && data.deposit !== existing.deposit);
+        (data.rentAmount !== undefined && !moneyEquals(data.rentAmount, existing.rentAmount)) ||
+        (data.deposit !== undefined && !moneyEquals(data.deposit, existing.deposit));
       if (protectedChange) {
         return apiError('A lease with payment history can only change its end date or status.', 409);
       }

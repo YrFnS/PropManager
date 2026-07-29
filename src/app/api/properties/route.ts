@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiError, getPagination, isPrismaError, requestRateLimit } from '@/lib/api';
 import { auditEntry } from '@/lib/audit';
+import { moneyToNumber } from '@/lib/money';
 import {
   propertyManagerSchema,
   propertySchema,
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
       const unitCount = property._count.units;
       const availableUnits = Math.max(0, unitCount - occupiedUnits - maintenanceUnits);
       const totalRent = property.units.reduce(
-        (sum, unit) => sum + (unit.leases[0]?.rentAmount ?? 0),
+        (sum, unit) => sum + moneyToNumber(unit.leases[0]?.rentAmount),
         0,
       );
 

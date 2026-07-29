@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiError, requestRateLimit } from '@/lib/api';
+import { moneyToNumber } from '@/lib/money';
 
 export async function GET(request: NextRequest) {
   try {
@@ -58,8 +59,8 @@ export async function GET(request: NextRequest) {
         type: 'payment',
         title: isArabic ? 'دفعة متأخرة' : 'Late payment',
         description: isArabic
-          ? `${payment.amount.toLocaleString('ar-IQ')} من ${tenantName}`
-          : `$${payment.amount.toLocaleString('en-US')} from ${tenantName}`,
+          ? `${moneyToNumber(payment.amount).toLocaleString('ar-IQ')} من ${tenantName}`
+          : `$${moneyToNumber(payment.amount).toLocaleString('en-US')} from ${tenantName}`,
         createdAt: payment.dueDate.toISOString(),
         section: 'payments',
       });

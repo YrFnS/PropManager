@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiError, requestRateLimit } from '@/lib/api';
+import { moneyToNumber } from '@/lib/money';
 
 function getPeriodRange(period: string) {
   const now = new Date();
@@ -72,18 +73,18 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    const totalRevenue = collectedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const totalRevenue = collectedPayments.reduce((sum, payment) => sum + moneyToNumber(payment.amount), 0);
     const expectedAmount = (payment: (typeof duePayments)[number]) =>
       payment.status === 'partial'
-        ? Math.max(payment.lease.rentAmount, payment.amount)
-        : payment.amount;
+        ? Math.max(moneyToNumber(payment.lease.rentAmount), moneyToNumber(payment.amount))
+        : moneyToNumber(payment.amount);
     const totalExpected = duePayments.reduce((sum, payment) => sum + expectedAmount(payment), 0);
     const collectedAgainstDue = duePayments
       .filter((payment) => payment.status === 'paid' || payment.status === 'partial')
-      .reduce((sum, payment) => sum + payment.amount, 0);
+      .reduce((sum, payment) => sum + moneyToNumber(payment.amount), 0);
     const outstandingAmount = duePayments.reduce((sum, payment) => {
-      if (payment.status === 'pending' || payment.status === 'late') return sum + payment.amount;
-      if (payment.status === 'partial') return sum + Math.max(0, expectedAmount(payment) - payment.amount);
+      if (payment.status === 'pending' || payment.status === 'late') return sum + moneyToNumber(payment.amount);
+      if (payment.status === 'partial') return sum + Math.max(0, expectedAmount(payment) - moneyToNumber(payment.amount));
       return sum;
     }, 0);
     const collectionRate = totalExpected > 0
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
     for (const payment of trendPayments) {
       if (!payment.paidDate) continue;
       const key = `${payment.paidDate.getFullYear()}-${String(payment.paidDate.getMonth() + 1).padStart(2, '0')}`;
-      if (trendByMonth.has(key)) trendByMonth.set(key, (trendByMonth.get(key) || 0) + payment.amount);
+      if (trendByMonth.has(key)) trendByMonth.set(key, (trendByMonth.get(key) || 0) + moneyToNumber(payment.amount));
     }
     const monthlyRevenue = Array.from(trendByMonth, ([month, revenue]) => ({ month, revenue }));
 
@@ -109,13 +110,13 @@ export async function GET(request: NextRequest) {
     for (const payment of collectedPayments) {
       const property = payment.lease.unit.property;
       const propertyEntry = propertyTotals.get(property.id) || { name: property.name, nameAr: property.nameAr, revenue: 0 };
-      propertyEntry.revenue += payment.amount;
+      propertyEntry.revenue += moneyToNumber(payment.amount);
       propertyTotals.set(property.id, propertyEntry);
 
       const method = payment.method || 'other';
       const methodEntry = methodTotals.get(method) || { count: 0, amount: 0 };
       methodEntry.count += 1;
-      methodEntry.amount += payment.amount;
+      methodEntry.amount += moneyToNumber(payment.amount);
       methodTotals.set(method, methodEntry);
 
       const tenant = payment.tenant;
@@ -126,7 +127,7 @@ export async function GET(request: NextRequest) {
         totalPaid: 0,
         paymentCount: 0,
       };
-      tenantEntry.totalPaid += payment.amount;
+      tenantEntry.totalPaid += moneyToNumber(payment.amount);
       tenantEntry.paymentCount += 1;
       tenantTotals.set(tenant.id, tenantEntry);
     }

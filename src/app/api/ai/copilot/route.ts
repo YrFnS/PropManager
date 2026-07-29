@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { strictRateLimit, sanitizeString } from '@/lib/validation';
 import ZAI from 'z-ai-web-dev-sdk';
+import { moneyToNumber } from '@/lib/money';
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
       0,
     );
     const occupancyRate = totalUnits > 0 ? ((occupiedUnits / totalUnits) * 100).toFixed(1) : '0';
-    const totalRevenue = activeLeases.reduce((sum, l) => sum + l.rentAmount, 0);
+    const totalRevenue = activeLeases.reduce((sum, l) => sum + moneyToNumber(l.rentAmount), 0);
     const pendingPayments = await db.payment.count({ where: { status: 'pending' } });
     const latePayments = await db.payment.count({ where: { status: 'late' } });
     const openMaintenance = await db.maintenanceRequest.count({
@@ -69,14 +70,14 @@ ${activeLeases
   .slice(0, 10)
   .map(
     (l) =>
-      `- ${l.tenant.name} in ${l.unit.unitNumber} at ${l.unit.property.name}: $${l.rentAmount}/month, ends ${l.endDate.toISOString().split('T')[0]}`,
+      `- ${l.tenant.name} in ${l.unit.unitNumber} at ${l.unit.property.name}: $${moneyToNumber(l.rentAmount).toLocaleString()}/month, ends ${l.endDate.toISOString().split('T')[0]}`,
   )
   .join('\n')}
 
 Recent Payments:
 ${payments
   .slice(0, 10)
-  .map((p) => `- ${p.tenant.name}: $${p.amount} (${p.status})`)
+  .map((p) => `- ${p.tenant.name}: $${moneyToNumber(p.amount).toLocaleString()} (${p.status})`)
   .join('\n')}
 
 Open Maintenance:

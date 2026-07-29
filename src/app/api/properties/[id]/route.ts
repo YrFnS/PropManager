@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiError, requestRateLimit } from '@/lib/api';
+import { moneyToNumber } from '@/lib/money';
 
 export async function GET(
   request: NextRequest,
@@ -45,9 +46,9 @@ export async function GET(
       (unit) => unit.leases.length === 0 && unit.status === 'maintenance',
     ).length;
     const availableUnits = Math.max(0, totalUnits - occupiedUnits - maintenanceUnits);
-    const totalRent = property.units.reduce((sum, unit) => sum + unit.rentAmount, 0);
+    const totalRent = property.units.reduce((sum, unit) => sum + moneyToNumber(unit.rentAmount), 0);
     const monthlyRevenue = property.units.reduce(
-      (sum, unit) => sum + (unit.leases[0]?.rentAmount ?? 0),
+      (sum, unit) => sum + moneyToNumber(unit.leases[0]?.rentAmount),
       0,
     );
 

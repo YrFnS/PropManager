@@ -155,7 +155,7 @@ export async function POST() {
       startDate: new Date(2025, 0, 1 + i),
       endDate: new Date(2026, 0, 1 + i),
       rentAmount: unit.rentAmount,
-      deposit: unit.rentAmount * 2,
+      deposit: Number(unit.rentAmount) * 2,
       status: i < 6 ? 'active' : 'expired',
     }));
 
@@ -188,7 +188,7 @@ export async function POST() {
       paymentsData.push({
         leaseId: lease.id,
         tenantId: tenant.id,
-        amount: lease.rentAmount,
+        amount: Number(lease.rentAmount),
         dueDate,
         paidDate,
         status,

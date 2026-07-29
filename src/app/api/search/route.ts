@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiError, requestRateLimit } from '@/lib/api';
 import { sanitizeString } from '@/lib/validation';
+import { moneyToNumber } from '@/lib/money';
 
 interface SearchResultItem {
   id: string;
@@ -121,7 +122,7 @@ export async function GET(request: NextRequest) {
     const paymentResults: SearchResultItem[] = payments.map((item) => ({
       id: item.id,
       type: 'payment',
-      label: `${item.amount.toLocaleString(isArabic ? 'ar-IQ' : 'en-US')} · ${isArabic && item.tenant.nameAr ? item.tenant.nameAr : item.tenant.name}`,
+      label: `${moneyToNumber(item.amount).toLocaleString(isArabic ? 'ar-IQ' : 'en-US')} · ${isArabic && item.tenant.nameAr ? item.tenant.nameAr : item.tenant.name}`,
       sublabel: `${item.lease.unit.unitNumber} · ${isArabic && item.lease.unit.property.nameAr ? item.lease.unit.property.nameAr : item.lease.unit.property.name}`,
       section: 'payments',
     }));

@@ -275,7 +275,7 @@ async function main() {
       startDate,
       endDate,
       rentAmount: unit.rentAmount,
-      deposit: unit.rentAmount * 2,
+      deposit: Number(unit.rentAmount) * 2,
       status: 'active',
     });
   }

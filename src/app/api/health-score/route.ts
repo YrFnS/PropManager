@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiError, requestRateLimit } from '@/lib/api';
+import { moneyToNumber } from '@/lib/money';
 
 export async function GET(request: NextRequest) {
   try {
@@ -56,11 +57,11 @@ export async function GET(request: NextRequest) {
 
     const occupancyRate = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
     const expectedPayments = duePayments.reduce((sum, payment) => {
-      if (payment.status === 'partial') return sum + Math.max(payment.amount, payment.lease.rentAmount);
-      return sum + payment.amount;
+      if (payment.status === 'partial') return sum + Math.max(moneyToNumber(payment.amount), moneyToNumber(payment.lease.rentAmount));
+      return sum + moneyToNumber(payment.amount);
     }, 0);
     const collectedPayments = duePayments.reduce((sum, payment) => {
-      return payment.status === 'paid' || payment.status === 'partial' ? sum + payment.amount : sum;
+      return payment.status === 'paid' || payment.status === 'partial' ? sum + moneyToNumber(payment.amount) : sum;
     }, 0);
     const collectionRate = expectedPayments > 0 ? Math.min(100, (collectedPayments / expectedPayments) * 100) : 100;
     const maintenanceRate = totalMaintenance > 0 ? (resolvedMaintenance / totalMaintenance) * 100 : 100;

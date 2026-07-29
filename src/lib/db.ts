@@ -1,6 +1,9 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE_NAME, verifySessionToken } from '@/lib/auth';
+import { configureDecimalSerialization } from '@/lib/money';
+
+configureDecimalSerialization();
 
 const ORGANIZATION_SCOPED_MODELS = new Set<string>([
   'Property',
