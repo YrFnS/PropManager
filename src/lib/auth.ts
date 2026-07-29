@@ -1,12 +1,25 @@
 const encoder = new TextEncoder();
 
 export const SESSION_COOKIE_NAME = 'pm_session';
-export const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60;
+export const SESSION_MAX_AGE_SECONDS = 4 * 60 * 60;
+export const APP_ROLES = ['owner', 'manager', 'accountant', 'maintenance', 'viewer'] as const;
 
-interface SessionPayload {
+export type AppRole = (typeof APP_ROLES)[number];
+
+export interface SessionPayload {
+  userId: string;
+  membershipId: string;
   email: string;
+  name: string;
+  organizationId: string;
+  organizationName: string;
+  role: AppRole;
+  currency: string;
+  locale: string;
   exp: number;
 }
+
+export type SessionInput = Omit<SessionPayload, 'exp'>;
 
 function getSecret(): string | null {
   const secret = process.env.AUTH_SECRET?.trim();
@@ -30,12 +43,30 @@ function encodePayload(payload: SessionPayload): string {
   return bytesToBase64Url(encoder.encode(JSON.stringify(payload)));
 }
 
+function isRole(value: unknown): value is AppRole {
+  return typeof value === 'string' && APP_ROLES.includes(value as AppRole);
+}
+
 function decodePayload(value: string): SessionPayload | null {
   try {
     const decoded = new TextDecoder().decode(base64UrlToBytes(value));
     const payload = JSON.parse(decoded) as Partial<SessionPayload>;
-    if (typeof payload.email !== 'string' || typeof payload.exp !== 'number') return null;
-    return { email: payload.email, exp: payload.exp };
+    if (
+      typeof payload.userId !== 'string' ||
+      typeof payload.membershipId !== 'string' ||
+      typeof payload.email !== 'string' ||
+      typeof payload.name !== 'string' ||
+      typeof payload.organizationId !== 'string' ||
+      typeof payload.organizationName !== 'string' ||
+      !isRole(payload.role) ||
+      typeof payload.currency !== 'string' ||
+      typeof payload.locale !== 'string' ||
+      typeof payload.exp !== 'number'
+    ) {
+      return null;
+    }
+
+    return payload as SessionPayload;
   } catch {
     return null;
   }
@@ -53,7 +84,7 @@ async function sign(value: string, secret: string): Promise<string> {
   return bytesToBase64Url(new Uint8Array(signature));
 }
 
-function timingSafeEqual(left: string, right: string): boolean {
+function constantTimeEqual(left: string, right: string): boolean {
   const leftBytes = encoder.encode(left);
   const rightBytes = encoder.encode(right);
   const length = Math.max(leftBytes.length, rightBytes.length);
@@ -68,23 +99,32 @@ function timingSafeEqual(left: string, right: string): boolean {
 
 export function getAuthConfigurationError(): string | null {
   if (!getSecret()) return 'AUTH_SECRET must contain at least 32 characters.';
-  if (!process.env.ADMIN_EMAIL?.trim()) return 'ADMIN_EMAIL is not configured.';
-  if (!process.env.ADMIN_PASSWORD) return 'ADMIN_PASSWORD is not configured.';
   return null;
 }
 
-export function validateAdminCredentials(email: string, password: string): boolean {
-  const configuredEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase() ?? '';
-  const configuredPassword = process.env.ADMIN_PASSWORD ?? '';
-  return timingSafeEqual(email.trim().toLowerCase(), configuredEmail) && timingSafeEqual(password, configuredPassword);
+export function validateBootstrapAdminCredentials(email: string, password: string): boolean {
+  const configuredEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const configuredPassword = process.env.ADMIN_PASSWORD;
+  if (!configuredEmail || !configuredPassword) return false;
+  return constantTimeEqual(email.trim().toLowerCase(), configuredEmail) && constantTimeEqual(password, configuredPassword);
 }
 
-export async function createSessionToken(email: string): Promise<string> {
+export function normalizeRole(value: string): AppRole | null {
+  return isRole(value) ? value : null;
+}
+
+export function hasRole(session: SessionPayload, allowedRoles: readonly AppRole[]): boolean {
+  return allowedRoles.includes(session.role);
+}
+
+export async function createSessionToken(input: SessionInput): Promise<string> {
   const secret = getSecret();
   if (!secret) throw new Error('Authentication is not configured.');
 
   const payload = encodePayload({
-    email: email.trim().toLowerCase(),
+    ...input,
+    email: input.email.trim().toLowerCase(),
+    currency: input.currency.trim().toUpperCase(),
     exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS,
   });
   const signature = await sign(payload, secret);
@@ -99,7 +139,7 @@ export async function verifySessionToken(token: string | undefined | null): Prom
   if (!payloadPart || !signaturePart || extra) return null;
 
   const expectedSignature = await sign(payloadPart, secret);
-  if (!timingSafeEqual(signaturePart, expectedSignature)) return null;
+  if (!constantTimeEqual(signaturePart, expectedSignature)) return null;
 
   const payload = decodePayload(payloadPart);
   if (!payload || payload.exp <= Math.floor(Date.now() / 1000)) return null;

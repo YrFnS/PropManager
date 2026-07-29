@@ -12,21 +12,21 @@ import { Button } from '@/components/ui/button';
 const COPY = {
   en: {
     title: 'Sign in to PropManager',
-    description: 'Use the administrator credentials configured on the server.',
+    description: 'Use your organization account. The environment administrator is used only to bootstrap the first owner.',
     email: 'Email',
     password: 'Password',
     submit: 'Sign in',
     signingIn: 'Signing in…',
-    genericError: 'Unable to sign in. Please verify the server configuration and try again.',
+    genericError: 'Unable to sign in. Verify your credentials and try again.',
   },
   ar: {
     title: 'تسجيل الدخول إلى مدير العقارات',
-    description: 'استخدم بيانات مدير النظام المعرّفة على الخادم.',
+    description: 'استخدم حساب مؤسستك. بيانات مدير الخادم تُستخدم فقط لإنشاء المالك الأول.',
     email: 'البريد الإلكتروني',
     password: 'كلمة المرور',
     submit: 'تسجيل الدخول',
     signingIn: 'جارٍ تسجيل الدخول…',
-    genericError: 'تعذر تسجيل الدخول. تحقق من إعدادات الخادم ثم حاول مرة أخرى.',
+    genericError: 'تعذر تسجيل الدخول. تحقق من بيانات الحساب ثم حاول مرة أخرى.',
   },
 } as const;
 

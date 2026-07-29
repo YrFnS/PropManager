@@ -1,11 +1,18 @@
 import createMiddleware from 'next-intl/middleware';
 import { NextRequest, NextResponse } from 'next/server';
 import { routing } from '@/i18n/routing';
-import { SESSION_COOKIE_NAME, verifySessionToken } from '@/lib/auth';
+import {
+  type AppRole,
+  hasRole,
+  SESSION_COOKIE_NAME,
+  verifySessionToken,
+} from '@/lib/auth';
 
 const intlMiddleware = createMiddleware(routing);
-const AUTH_API_PREFIX = '/api/auth/';
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+const PUBLIC_AUTH_PATHS = new Set(['/api/auth/login', '/api/auth/logout']);
+const ALL_ROLES: readonly AppRole[] = ['owner', 'manager', 'accountant', 'maintenance', 'viewer'];
+const MANAGEMENT_ROLES: readonly AppRole[] = ['owner', 'manager'];
 
 function getRequestLocale(request: NextRequest): 'en' | 'ar' {
   const firstSegment = request.nextUrl.pathname.split('/').filter(Boolean)[0];
@@ -37,15 +44,39 @@ function hasValidOrigin(request: NextRequest) {
   return origin === request.nextUrl.origin;
 }
 
+function getRequiredRoles(pathname: string, method: string): readonly AppRole[] {
+  if (pathname.startsWith('/api/auth/')) return ALL_ROLES;
+  if (pathname.startsWith('/api/settings/users')) return ['owner'];
+  if (pathname.startsWith('/api/settings/organization')) {
+    return SAFE_METHODS.has(method) ? ALL_ROLES : ['owner'];
+  }
+  if (/^\/api\/settings\/(seed|reset|export)$/.test(pathname)) return ['owner'];
+  if (pathname.startsWith('/api/ai/')) return MANAGEMENT_ROLES;
+
+  if (SAFE_METHODS.has(method)) return ALL_ROLES;
+  if (pathname.startsWith('/api/payments')) return ['owner', 'manager', 'accountant'];
+  if (pathname.startsWith('/api/maintenance')) return ['owner', 'manager', 'maintenance'];
+  if (
+    pathname.startsWith('/api/properties') ||
+    pathname.startsWith('/api/units') ||
+    pathname.startsWith('/api/tenants') ||
+    pathname.startsWith('/api/leases') ||
+    pathname.startsWith('/api/messages')
+  ) {
+    return MANAGEMENT_ROLES;
+  }
+
+  return MANAGEMENT_ROLES;
+}
+
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isApi = pathname.startsWith('/api/');
-  const isAuthApi = pathname.startsWith(AUTH_API_PREFIX);
   const locale = getRequestLocale(request);
   const localeStrippedPath = getLocaleStrippedPath(pathname);
   const isLoginPage = localeStrippedPath === '/login';
 
-  if (isAuthApi) {
+  if (PUBLIC_AUTH_PATHS.has(pathname)) {
     if (!hasValidOrigin(request)) {
       return withSecurityHeaders(NextResponse.json({ error: 'Cross-site request blocked.' }, { status: 403 }));
     }
@@ -60,6 +91,13 @@ export async function proxy(request: NextRequest) {
     }
     if (!hasValidOrigin(request)) {
       return withSecurityHeaders(NextResponse.json({ error: 'Cross-site request blocked.' }, { status: 403 }));
+    }
+
+    const requiredRoles = getRequiredRoles(pathname, request.method);
+    if (!hasRole(session, requiredRoles)) {
+      return withSecurityHeaders(
+        NextResponse.json({ error: 'You do not have permission to perform this action.' }, { status: 403 }),
+      );
     }
 
     if (

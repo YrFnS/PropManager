@@ -5,9 +5,6 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -19,86 +16,11 @@ jobs:
       ENABLE_AI_COPILOT: "false"
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: agent/stabilize-core-workflows
-          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - name: Apply reviewed organization payload when present
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ ! -f .phase2-payload.ready ]; then
-            echo "No organization payload to apply."
-            exit 0
-          fi
-
-          for part in .phase2-payload.part-00 .phase2-payload.part-01 .phase2-payload.part-02 .phase2-payload.fixed-{00..10}; do
-            test -f "$part"
-          done
-
-          cat .phase2-payload.part-00 .phase2-payload.part-01 .phase2-payload.part-02 .phase2-payload.fixed-{00..10} \
-            | LC_ALL=C tr -cd 'A-Za-z0-9+/=' > /tmp/propmanager-phase2.b64
-          wc -c /tmp/propmanager-phase2.b64
-          sha256sum /tmp/propmanager-phase2.b64
-          base64 -d /tmp/propmanager-phase2.b64 > /tmp/propmanager-phase2.tar.gz
-          echo "b42c5980bd91554fe204f1c1f654e69e55e3284a262d8669d74b55faea2e4e67  /tmp/propmanager-phase2.tar.gz" | sha256sum -c -
-          tar -tzf /tmp/propmanager-phase2.tar.gz >/dev/null
-          tar -xzf /tmp/propmanager-phase2.tar.gz -C .
-          rm -f .phase2-payload.* .github/workflows/apply-phase2.yml
-
-          cat > .github/workflows/ci.yml <<'YAML'
-          name: CI
-
-          on:
-            pull_request:
-            push:
-              branches: [main]
-
-          jobs:
-            validate:
-              runs-on: ubuntu-latest
-              env:
-                DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propmanager?schema=public
-                AUTH_SECRET: ci-only-auth-secret-with-more-than-thirty-two-characters
-                ADMIN_EMAIL: ci@example.com
-                ADMIN_PASSWORD: ci-only-password
-                ENABLE_AI_COPILOT: "false"
-              steps:
-                - uses: actions/checkout@v4
-                - uses: oven-sh/setup-bun@v2
-                  with:
-                    bun-version: latest
-                - run: bun ci
-                - run: bun run db:generate
-                - run: bun run typecheck
-                - run: bun run lint
-                - run: bun run build
-          YAML
-
-          touch /tmp/phase2-applied
-          git diff --check
       - run: bun ci
       - run: bun run db:generate
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run build
-      - name: Publish validated organization phase
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ ! -f /tmp/phase2-applied ]; then
-            exit 0
-          fi
-          if [ "${{ job.status }}" != "success" ]; then
-            echo "Validation failed; refusing to publish."
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "feat: add organization isolation and role access [phase2 applied]"
-          git push origin HEAD:agent/stabilize-core-workflows

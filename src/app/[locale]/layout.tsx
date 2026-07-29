@@ -1,11 +1,14 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/components/ui/sonner';
+import { SessionProvider } from '@/components/auth/session-provider';
 import { LocaleShell } from '@/components/layout/locale-shell';
+import { SESSION_COOKIE_NAME, verifySessionToken } from '@/lib/auth';
 import { Geist, Geist_Mono, Noto_Sans_Arabic } from 'next/font/google';
 import '../globals.css';
 import '../stabilization.css';
@@ -44,6 +47,8 @@ export default async function LocaleLayout({
   const locale = await getLocale();
   const messages = await getMessages();
   const dir = locale === 'ar' ? 'rtl' : 'ltr';
+  const cookieStore = await cookies();
+  const session = await verifySessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
 
   return (
     <html lang={locale} dir={dir} suppressHydrationWarning>
@@ -52,8 +57,10 @@ export default async function LocaleLayout({
       >
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <NextIntlClientProvider locale={locale} messages={messages}>
-            <LocaleShell>{children}</LocaleShell>
-            <Toaster />
+            <SessionProvider initialSession={session}>
+              <LocaleShell>{children}</LocaleShell>
+              <Toaster />
+            </SessionProvider>
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>
