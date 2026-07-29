@@ -1,196 +1,155 @@
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { rateLimit } from '@/lib/validation';
+import { apiError, requestRateLimit } from '@/lib/api';
+
+function getPeriodRange(period: string) {
+  const now = new Date();
+  switch (period) {
+    case 'lastMonth':
+      return {
+        startDate: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        endDate: new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999),
+      };
+    case 'thisQuarter': {
+      const startMonth = Math.floor(now.getMonth() / 3) * 3;
+      return {
+        startDate: new Date(now.getFullYear(), startMonth, 1),
+        endDate: new Date(now.getFullYear(), startMonth + 3, 0, 23, 59, 59, 999),
+      };
+    }
+    case 'thisYear':
+      return {
+        startDate: new Date(now.getFullYear(), 0, 1),
+        endDate: new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999),
+      };
+    default:
+      return {
+        startDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999),
+      };
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const rateLimitResult = rateLimit();
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-    }
+    const limitResult = requestRateLimit(request, 'reports:read', { maxRequests: 60 });
+    if (!limitResult.success) return apiError('Too many requests', 429);
 
-    const { searchParams } = new URL(request.url);
-    const period = searchParams.get('period') || 'thisMonth';
-
-    // Calculate date range based on period
+    const period = new URL(request.url).searchParams.get('period') || 'thisMonth';
+    const { startDate, endDate } = getPeriodRange(period);
     const now = new Date();
-    let startDate: Date;
-    let endDate: Date;
+    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-    switch (period) {
-      case 'lastMonth': {
-        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        startDate = lastMonth;
-        endDate = new Date(now.getFullYear(), now.getMonth(), 0);
-        break;
-      }
-      case 'thisQuarter': {
-        const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-        startDate = quarterStart;
-        endDate = now;
-        break;
-      }
-      case 'thisYear': {
-        startDate = new Date(now.getFullYear(), 0, 1);
-        endDate = now;
-        break;
-      }
-      default: { // thisMonth
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        endDate = now;
-        break;
-      }
-    }
-
-    // Get payments within the date range
-    const payments = await db.payment.findMany({
-      where: {
-        dueDate: {
-          gte: startDate,
-          lte: endDate,
+    const [duePayments, collectedPayments, trendPayments] = await Promise.all([
+      db.payment.findMany({
+        where: { dueDate: { gte: startDate, lte: endDate } },
+        select: {
+          amount: true,
+          status: true,
+          lease: { select: { rentAmount: true } },
         },
-      },
-      include: {
-        tenant: { select: { id: true, name: true, nameAr: true } },
-        lease: {
-          include: {
-            unit: {
-              include: { property: { select: { id: true, name: true, nameAr: true } } },
+      }),
+      db.payment.findMany({
+        where: {
+          status: { in: ['paid', 'partial'] },
+          paidDate: { gte: startDate, lte: endDate },
+        },
+        include: {
+          tenant: { select: { id: true, name: true, nameAr: true } },
+          lease: {
+            select: {
+              unit: { select: { property: { select: { id: true, name: true, nameAr: true } } } },
             },
           },
         },
-      },
-      orderBy: { dueDate: 'desc' },
-    });
+      }),
+      db.payment.findMany({
+        where: {
+          status: { in: ['paid', 'partial'] },
+          paidDate: { gte: twelveMonthsAgo },
+        },
+        select: { amount: true, paidDate: true },
+      }),
+    ]);
 
-    // Summary calculations
-    const totalRevenue = payments
-      .filter((p) => p.status === 'paid' || p.status === 'partial')
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    const totalExpected = payments.reduce((sum, p) => sum + p.amount, 0);
-
+    const totalRevenue = collectedPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const expectedAmount = (payment: (typeof duePayments)[number]) =>
+      payment.status === 'partial'
+        ? Math.max(payment.lease.rentAmount, payment.amount)
+        : payment.amount;
+    const totalExpected = duePayments.reduce((sum, payment) => sum + expectedAmount(payment), 0);
+    const collectedAgainstDue = duePayments
+      .filter((payment) => payment.status === 'paid' || payment.status === 'partial')
+      .reduce((sum, payment) => sum + payment.amount, 0);
+    const outstandingAmount = duePayments.reduce((sum, payment) => {
+      if (payment.status === 'pending' || payment.status === 'late') return sum + payment.amount;
+      if (payment.status === 'partial') return sum + Math.max(0, expectedAmount(payment) - payment.amount);
+      return sum;
+    }, 0);
     const collectionRate = totalExpected > 0
-      ? Math.round((totalRevenue / totalExpected) * 100)
+      ? Math.min(100, Math.round((collectedAgainstDue / totalExpected) * 100))
       : 0;
 
-    const outstandingAmount = payments
-      .filter((p) => p.status === 'pending' || p.status === 'late')
-      .reduce((sum, p) => sum + p.amount, 0);
-
-    // Monthly Revenue Trend (last 12 months)
-    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-    const allPayments12Months = await db.payment.findMany({
-      where: {
-        status: { in: ['paid', 'partial'] },
-        paidDate: { gte: twelveMonthsAgo },
-      },
-      select: { amount: true, paidDate: true },
-    });
-
-    const monthlyRevenue: { month: string; revenue: number }[] = [];
-    for (let i = 11; i >= 0; i--) {
-      const monthDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthKey = monthDate.toISOString().slice(0, 7); // YYYY-MM
-      const monthRevenue = allPayments12Months
-        .filter((p) => {
-          if (!p.paidDate) return false;
-          const paidMonth = p.paidDate.toISOString().slice(0, 7);
-          return paidMonth === monthKey;
-        })
-        .reduce((sum, p) => sum + p.amount, 0);
-      monthlyRevenue.push({ month: monthKey, revenue: monthRevenue });
+    const trendByMonth = new Map<string, number>();
+    for (let offset = 11; offset >= 0; offset -= 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      trendByMonth.set(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`, 0);
     }
+    for (const payment of trendPayments) {
+      if (!payment.paidDate) continue;
+      const key = `${payment.paidDate.getFullYear()}-${String(payment.paidDate.getMonth() + 1).padStart(2, '0')}`;
+      if (trendByMonth.has(key)) trendByMonth.set(key, (trendByMonth.get(key) || 0) + payment.amount);
+    }
+    const monthlyRevenue = Array.from(trendByMonth, ([month, revenue]) => ({ month, revenue }));
 
-    // Revenue by Property
-    const properties = await db.property.findMany({
-      include: {
-        units: {
-          include: {
-            lease: {
-              where: { status: 'active' },
-              select: { rentAmount: true },
-            },
-          },
-        },
-      },
-    });
+    const propertyTotals = new Map<string, { name: string; nameAr: string | null; revenue: number }>();
+    const methodTotals = new Map<string, { count: number; amount: number }>();
+    const tenantTotals = new Map<string, { id: string; name: string; nameAr: string | null; totalPaid: number; paymentCount: number }>();
 
-    const revenueByProperty = properties.map((p) => {
-      const revenue = p.units.reduce((sum, u) => {
-        const leaseRent = u.lease?.rentAmount || u.rentAmount;
-        return sum + leaseRent;
-      }, 0);
-      return {
-        name: p.name,
-        nameAr: p.nameAr,
-        revenue,
+    for (const payment of collectedPayments) {
+      const property = payment.lease.unit.property;
+      const propertyEntry = propertyTotals.get(property.id) || { name: property.name, nameAr: property.nameAr, revenue: 0 };
+      propertyEntry.revenue += payment.amount;
+      propertyTotals.set(property.id, propertyEntry);
+
+      const method = payment.method || 'other';
+      const methodEntry = methodTotals.get(method) || { count: 0, amount: 0 };
+      methodEntry.count += 1;
+      methodEntry.amount += payment.amount;
+      methodTotals.set(method, methodEntry);
+
+      const tenant = payment.tenant;
+      const tenantEntry = tenantTotals.get(tenant.id) || {
+        id: tenant.id,
+        name: tenant.name,
+        nameAr: tenant.nameAr,
+        totalPaid: 0,
+        paymentCount: 0,
       };
-    }).sort((a, b) => b.revenue - a.revenue);
-
-    // Payment Methods Breakdown
-    const methodCounts: Record<string, { count: number; amount: number }> = {};
-    payments
-      .filter((p) => p.status === 'paid' || p.status === 'partial')
-      .forEach((p) => {
-        const method = p.method || 'other';
-        if (!methodCounts[method]) {
-          methodCounts[method] = { count: 0, amount: 0 };
-        }
-        methodCounts[method].count++;
-        methodCounts[method].amount += p.amount;
-      });
-
-    const paymentMethods = Object.entries(methodCounts).map(([method, data]) => ({
-      method,
-      count: data.count,
-      amount: data.amount,
-    }));
-
-    // If no payment methods data, provide default structure
-    if (paymentMethods.length === 0) {
-      ['cash', 'bank_transfer', 'online', 'check'].forEach((m) => {
-        paymentMethods.push({ method: m, count: 0, amount: 0 });
-      });
+      tenantEntry.totalPaid += payment.amount;
+      tenantEntry.paymentCount += 1;
+      tenantTotals.set(tenant.id, tenantEntry);
     }
 
-    // Top Tenants by total paid
-    const tenantTotals: Record<string, { id: string; name: string; nameAr: string | null; totalPaid: number; paymentCount: number }> = {};
-    payments
-      .filter((p) => p.status === 'paid' || p.status === 'partial')
-      .forEach((p) => {
-        const tid = p.tenantId;
-        if (!tenantTotals[tid]) {
-          tenantTotals[tid] = {
-            id: tid,
-            name: p.tenant.name,
-            nameAr: p.tenant.nameAr,
-            totalPaid: 0,
-            paymentCount: 0,
-          };
-        }
-        tenantTotals[tid].totalPaid += p.amount;
-        tenantTotals[tid].paymentCount++;
-      });
-
-    const topTenants = Object.values(tenantTotals)
-      .sort((a, b) => b.totalPaid - a.totalPaid)
-      .slice(0, 10);
+    const paymentMethods = ['cash', 'bank_transfer', 'online', 'check'].map((method) => ({
+      method,
+      count: methodTotals.get(method)?.count || 0,
+      amount: methodTotals.get(method)?.amount || 0,
+    }));
+    const otherMethod = methodTotals.get('other');
+    if (otherMethod) paymentMethods.push({ method: 'other', ...otherMethod });
 
     return NextResponse.json({
-      summary: {
-        totalRevenue,
-        totalExpected,
-        collectionRate,
-        outstandingAmount,
-      },
+      summary: { totalRevenue, totalExpected, collectionRate, outstandingAmount },
       monthlyRevenue,
-      revenueByProperty,
+      revenueByProperty: Array.from(propertyTotals.values()).sort((a, b) => b.revenue - a.revenue),
       paymentMethods,
-      topTenants,
+      topTenants: Array.from(tenantTotals.values())
+        .sort((a, b) => b.totalPaid - a.totalPaid)
+        .slice(0, 10),
     });
   } catch (error) {
     console.error('Reports API error:', error);
-    return NextResponse.json({ error: 'Failed to generate reports' }, { status: 500 });
+    return apiError('Failed to generate reports', 500);
   }
 }

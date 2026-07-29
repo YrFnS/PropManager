@@ -1,27 +1,34 @@
+import type { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, getLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { routing } from '@/i18n/routing';
 import { ThemeProvider } from 'next-themes';
 import { Toaster } from '@/components/ui/sonner';
-import { AppShell } from '@/components/layout/app-shell';
-import { Geist, Geist_Mono } from 'next/font/google';
-import { Noto_Sans_Arabic } from 'next/font/google';
+import { LocaleShell } from '@/components/layout/locale-shell';
+import { Geist, Geist_Mono, Noto_Sans_Arabic } from 'next/font/google';
+import '../globals.css';
+import '../stabilization.css';
+
+export const metadata: Metadata = {
+  title: 'PropManager - Property Management',
+  description: 'Modern property management application with multilingual support',
+};
 
 const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+  variable: '--font-geist-sans',
+  subsets: ['latin'],
 });
 
 const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
 });
 
 const notoArabic = Noto_Sans_Arabic({
-  variable: "--font-noto-arabic",
-  subsets: ["arabic"],
-  weight: ["400", "500", "600", "700"],
+  variable: '--font-noto-arabic',
+  subsets: ['arabic'],
+  weight: ['400', '500', '600', '700'],
 });
 
 export default async function LocaleLayout({
@@ -32,16 +39,10 @@ export default async function LocaleLayout({
   params: Promise<{ locale: string }>;
 }) {
   const { locale: localeParam } = await params;
+  if (!routing.locales.includes(localeParam as 'en' | 'ar')) notFound();
+
   const locale = await getLocale();
-
-  // Validate that the incoming `locale` parameter is valid
-  if (!routing.locales.includes(localeParam as any)) {
-    notFound();
-  }
-
-  // Providing all messages to the client side
   const messages = await getMessages();
-
   const dir = locale === 'ar' ? 'rtl' : 'ltr';
 
   return (
@@ -51,9 +52,7 @@ export default async function LocaleLayout({
       >
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <NextIntlClientProvider locale={locale} messages={messages}>
-            <AppShell>
-              {children}
-            </AppShell>
+            <LocaleShell>{children}</LocaleShell>
             <Toaster />
           </NextIntlClientProvider>
         </ThemeProvider>

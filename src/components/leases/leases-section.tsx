@@ -1,29 +1,34 @@
 'use client';
 
-import { useTranslations, useLocale } from 'next-intl';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Checkbox } from '@/components/ui/checkbox';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Plus, FileText, Pencil, Trash2, Download, FileCheck, Clock, DollarSign, ChevronDown } from 'lucide-react';
-import EmptyState from '@/components/ui/empty-state';
-import AnimatedCounter from '@/components/ui/animated-counter';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Skeleton } from '@/components/ui/skeleton';
-import { BulkActionsBar } from '@/components/ui/bulk-actions-bar';
-import { STATUS_COLORS, DEFAULT_STATUS_COLOR } from '@/lib/status-config';
+  ChevronDown,
+  Clock,
+  DollarSign,
+  Download,
+  FileCheck,
+  FileText,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import { toast } from 'sonner';
-import { useEffect, useState, useCallback } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { BulkActionsBar } from '@/components/ui/bulk-actions-bar';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import EmptyState from '@/components/ui/empty-state';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { DEFAULT_STATUS_COLOR, STATUS_COLORS } from '@/lib/status-config';
 
 interface Lease {
   id: string;
@@ -40,6 +45,7 @@ interface Lease {
 interface UnitOption {
   id: string;
   unitNumber: string;
+  status: string;
   property: { name: string; nameAr: string | null };
 }
 
@@ -49,99 +55,131 @@ interface TenantOption {
   nameAr: string | null;
 }
 
+interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 const emptyForm = {
-  unitId: '', tenantId: '', startDate: '', endDate: '', rentAmount: '', deposit: '', status: 'active',
+  unitId: '',
+  tenantId: '',
+  startDate: '',
+  endDate: '',
+  rentAmount: '',
+  deposit: '',
+  status: 'active',
 };
+
+async function responseError(response: Response, fallback: string) {
+  const payload = await response.json().catch(() => null);
+  return typeof payload?.error === 'string' ? payload.error : fallback;
+}
 
 export default function LeasesSection() {
   const t = useTranslations('leases');
   const tc = useTranslations('common');
   const locale = useLocale();
   const isAr = locale === 'ar';
+  const localeCode = isAr ? 'ar-IQ' : 'en-US';
 
   const [leases, setLeases] = useState<Lease[]>([]);
   const [stats, setStats] = useState({ activeLeases: 0, expiringSoon: 0, totalMonthlyRevenue: 0 });
+  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 1 });
   const [unitOptions, setUnitOptions] = useState<UnitOption[]>([]);
   const [tenantOptions, setTenantOptions] = useState<TenantOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState({ ...emptyForm });
   const [statusFilter, setStatusFilter] = useState('all');
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Bulk selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
 
-  const fetchLeases = useCallback(() => {
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
-    fetch(`/api/leases?${params.toString()}`)
-      .then(r => r.json())
-      .then(data => {
-        const result = data.data || data;
-        setLeases(result.leases || result || []);
-        setStats(result.stats || data.stats || { activeLeases: 0, expiringSoon: 0, totalMonthlyRevenue: 0 });
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [statusFilter]);
+  const currency = useMemo(
+    () => new Intl.NumberFormat(localeCode, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }),
+    [localeCode],
+  );
+  const formatCurrency = useCallback((value: number) => currency.format(value || 0), [currency]);
+  const formatDate = useCallback((value: string) => new Date(value).toLocaleDateString(localeCode), [localeCode]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
+  const loadLeases = useCallback(
+    async (page = pagination.page) => {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
+      setError('');
+      const params = new URLSearchParams({ page: String(page), limit: String(pagination.limit) });
+      if (statusFilter !== 'all') params.set('status', statusFilter);
       try {
-        const r = await fetch(`/api/leases?${params.toString()}`);
-        const data = await r.json();
-        if (cancelled) return;
-        const result = data.data || data;
-        setLeases(result.leases || result || []);
-        setStats(result.stats || data.stats || { activeLeases: 0, expiringSoon: 0, totalMonthlyRevenue: 0 });
-      } catch {
-        if (!cancelled) setLoading(false);
+        const response = await fetch(`/api/leases?${params.toString()}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error(await responseError(response, tc('error')));
+        const payload = await response.json();
+        setLeases(Array.isArray(payload.data) ? payload.data : []);
+        setStats(payload.stats || { activeLeases: 0, expiringSoon: 0, totalMonthlyRevenue: 0 });
+        setPagination(payload.pagination || { page, limit: pagination.limit, total: 0, totalPages: 1 });
+        setSelectedIds(new Set());
+      } catch (loadError) {
+        const message = loadError instanceof Error ? loadError.message : tc('error');
+        setError(message);
+        setLeases([]);
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [statusFilter]);
+    },
+    [pagination.limit, pagination.page, statusFilter, tc],
+  );
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
+    void loadLeases(1);
+  }, [statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      fetch('/api/units').then(r => r.json()),
-      fetch('/api/tenants').then(r => r.json()),
-    ]).then(([unitsData, tenantsData]) => {
-      if (cancelled) return;
-      setUnitOptions(unitsData.data || unitsData);
-      const result = tenantsData.data || tenantsData;
-      setTenantOptions(result.tenants || result || []);
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+      fetch('/api/units?limit=200', { cache: 'no-store' }).then(async (response) => {
+        if (!response.ok) throw new Error(await responseError(response, tc('error')));
+        return response.json();
+      }),
+      fetch('/api/tenants?limit=200&status=active', { cache: 'no-store' }).then(async (response) => {
+        if (!response.ok) throw new Error(await responseError(response, tc('error')));
+        return response.json();
+      }),
+    ])
+      .then(([unitsPayload, tenantsPayload]) => {
+        if (cancelled) return;
+        setUnitOptions(Array.isArray(unitsPayload.data) ? unitsPayload.data : []);
+        setTenantOptions(Array.isArray(tenantsPayload.data) ? tenantsPayload.data : []);
+      })
+      .catch((loadError) => {
+        if (!cancelled) toast.error(loadError instanceof Error ? loadError.message : tc('error'));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tc]);
 
-  const handleOpenAdd = () => {
+  const statusLabel = useCallback(
+    (status: string) => {
+      const labels: Record<string, string> = {
+        active: t('active'),
+        expired: t('expired'),
+        terminated: t('terminated'),
+      };
+      return labels[status] || status;
+    },
+    [t],
+  );
+
+  const openAdd = () => {
     setEditingId(null);
     setForm({ ...emptyForm });
     setDialogOpen(true);
   };
 
-  const handleOpenEdit = (lease: Lease) => {
+  const openEdit = (lease: Lease) => {
     setEditingId(lease.id);
     setForm({
       unitId: lease.unit.id,
@@ -149,13 +187,24 @@ export default function LeasesSection() {
       startDate: lease.startDate.split('T')[0],
       endDate: lease.endDate.split('T')[0],
       rentAmount: String(lease.rentAmount),
-      deposit: lease.deposit ? String(lease.deposit) : '',
+      deposit: lease.deposit == null ? '' : String(lease.deposit),
       status: lease.status,
     });
     setDialogOpen(true);
   };
 
   const handleSubmit = async () => {
+    const rentAmount = Number.parseFloat(form.rentAmount);
+    const deposit = form.deposit ? Number.parseFloat(form.deposit) : null;
+    if (!Number.isFinite(rentAmount) || rentAmount < 0) {
+      toast.error(isAr ? 'أدخل مبلغ إيجار صحيحاً.' : 'Enter a valid rent amount.');
+      return;
+    }
+    if (form.endDate <= form.startDate) {
+      toast.error(isAr ? 'يجب أن يكون تاريخ النهاية بعد تاريخ البداية.' : 'The end date must be after the start date.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const payload = {
@@ -163,565 +212,201 @@ export default function LeasesSection() {
         tenantId: form.tenantId,
         startDate: form.startDate,
         endDate: form.endDate,
-        rentAmount: parseFloat(form.rentAmount),
-        deposit: form.deposit ? parseFloat(form.deposit) : null,
+        rentAmount,
+        deposit: deposit !== null && Number.isFinite(deposit) ? deposit : null,
         status: form.status,
       };
-
-      const res = editingId
-        ? await fetch('/api/leases', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: editingId, ...payload }),
-          })
-        : await fetch('/api/leases', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-          });
-
-      if (res.ok) {
-        setForm({ ...emptyForm });
-        setEditingId(null);
-        setDialogOpen(false);
-        fetchLeases();
-        toast.success(editingId ? tc('updatedSuccessfully') : tc('createdSuccessfully'));
-      } else {
-        toast.error(tc('error'));
-      }
-    } catch {
-      toast.error(tc('error'));
+      const response = await fetch('/api/leases', {
+        method: editingId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingId ? { id: editingId, ...payload } : payload),
+      });
+      if (!response.ok) throw new Error(await responseError(response, tc('error')));
+      toast.success(editingId ? tc('updatedSuccessfully') : tc('createdSuccessfully'));
+      setDialogOpen(false);
+      setEditingId(null);
+      setForm({ ...emptyForm });
+      await loadLeases();
+    } catch (submitError) {
+      toast.error(submitError instanceof Error ? submitError.message : tc('error'));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async () => {
+  const deleteLease = async () => {
     if (!deleteId) return;
     try {
-      const res = await fetch(`/api/leases?id=${deleteId}`, { method: 'DELETE' });
-      if (res.ok) {
-        fetchLeases();
-        toast.success(tc('deletedSuccessfully'));
-      } else {
-        toast.error(tc('error'));
-      }
-    } catch {
-      toast.error(tc('error'));
+      const response = await fetch(`/api/leases?id=${encodeURIComponent(deleteId)}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error(await responseError(response, tc('error')));
+      toast.success(tc('deletedSuccessfully'));
+      await loadLeases();
+    } catch (deleteError) {
+      toast.error(deleteError instanceof Error ? deleteError.message : tc('error'));
     } finally {
       setDeleteId(null);
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      active: t('active'),
-      expired: t('expired'),
-      terminated: t('terminated'),
-    };
-    return labels[status] || status;
+  const runBulk = async (requests: Promise<Response>[], successLabel: string) => {
+    const responses = await Promise.all(requests);
+    const succeeded = responses.filter((response) => response.ok).length;
+    const failed = responses.length - succeeded;
+    if (succeeded) toast.success(`${succeeded} ${successLabel}`);
+    if (failed) {
+      const firstFailure = responses.find((response) => !response.ok);
+      toast.error(`${failed} ${isAr ? 'فشلت' : 'failed'}: ${firstFailure ? await responseError(firstFailure, tc('error')) : tc('error')}`);
+    }
   };
 
-  const exportCsv = () => {
-    const headers = ['Tenant', 'Unit/Property', 'Start Date', 'End Date', 'Rent', 'Deposit', 'Status'];
-    const rows = leases.map(l => [
-      isAr && l.tenant.nameAr ? l.tenant.nameAr : l.tenant.name,
-      `${l.unit.unitNumber} - ${isAr && l.unit.property.nameAr ? l.unit.property.nameAr : l.unit.property.name}`,
-      new Date(l.startDate).toLocaleDateString(),
-      new Date(l.endDate).toLocaleDateString(),
-      String(l.rentAmount),
-      l.deposit ? String(l.deposit) : '',
-      getStatusLabel(l.status),
+  const bulkDelete = async () => {
+    try {
+      await runBulk(
+        Array.from(selectedIds, (id) => fetch(`/api/leases?id=${encodeURIComponent(id)}`, { method: 'DELETE' })),
+        tc('deletedSuccessfully'),
+      );
+      setBulkDeleteOpen(false);
+      await loadLeases();
+    } catch {
+      toast.error(tc('error'));
+    }
+  };
+
+  const bulkStatus = async (status: string) => {
+    try {
+      await runBulk(
+        Array.from(selectedIds, (id) =>
+          fetch('/api/leases', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, status }),
+          }),
+        ),
+        tc('updatedSuccessfully'),
+      );
+      await loadLeases();
+    } catch {
+      toast.error(tc('error'));
+    }
+  };
+
+  const exportRows = (rowsToExport: Lease[], filename: string) => {
+    const headers = isAr
+      ? ['المستأجر', 'العقار / الوحدة', 'البداية', 'النهاية', 'الإيجار', 'التأمين', 'الحالة']
+      : ['Tenant', 'Property / Unit', 'Start date', 'End date', 'Rent', 'Deposit', 'Status'];
+    const rows = rowsToExport.map((lease) => [
+      isAr && lease.tenant.nameAr ? lease.tenant.nameAr : lease.tenant.name,
+      `${lease.unit.unitNumber} - ${isAr && lease.unit.property.nameAr ? lease.unit.property.nameAr : lease.unit.property.name}`,
+      formatDate(lease.startDate),
+      formatDate(lease.endDate),
+      String(lease.rentAmount),
+      lease.deposit == null ? '' : String(lease.deposit),
+      statusLabel(lease.status),
     ]);
-    const csvContent = [headers, ...rows].map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'leases.csv';
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
   };
 
-  // Bulk actions
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
+  const toggleSelected = (id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
   };
+  const selectAll = () => setSelectedIds(new Set(leases.map((lease) => lease.id)));
+  const clearSelection = () => setSelectedIds(new Set());
 
-  const selectAll = () => {
-    setSelectedIds(new Set(leases.map(l => l.id)));
-  };
+  const selectableUnits = unitOptions.filter(
+    (unit) => unit.status === 'available' || unit.id === form.unitId || form.status !== 'active',
+  );
 
-  const clearSelection = () => {
-    setSelectedIds(new Set());
-  };
-
-  const handleBulkDelete = async () => {
-    try {
-      const promises = Array.from(selectedIds).map(id =>
-        fetch(`/api/leases?id=${id}`, { method: 'DELETE' })
-      );
-      const results = await Promise.allSettled(promises);
-      const succeeded = results.filter(r => r.status === 'fulfilled').length;
-      toast.success(`${succeeded} ${tc('deletedSuccessfully')}`);
-      setSelectedIds(new Set());
-      setBulkDeleteOpen(false);
-      fetchLeases();
-    } catch {
-      toast.error(tc('error'));
-    }
-  };
-
-  const handleBulkChangeStatus = async (newStatus: string) => {
-    try {
-      const promises = Array.from(selectedIds).map(id =>
-        fetch('/api/leases', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, status: newStatus }),
-        })
-      );
-      const results = await Promise.allSettled(promises);
-      const succeeded = results.filter(r => r.status === 'fulfilled').length;
-      toast.success(`${succeeded} ${tc('updatedSuccessfully')}`);
-      setSelectedIds(new Set());
-      fetchLeases();
-    } catch {
-      toast.error(tc('error'));
-    }
-  };
-
-  const handleBulkExport = () => {
-    const selectedLeases = leases.filter(l => selectedIds.has(l.id));
-    const headers = ['Tenant', 'Unit/Property', 'Start Date', 'End Date', 'Rent', 'Deposit', 'Status'];
-    const rows = selectedLeases.map(l => [
-      isAr && l.tenant.nameAr ? l.tenant.nameAr : l.tenant.name,
-      `${l.unit.unitNumber} - ${isAr && l.unit.property.nameAr ? l.unit.property.nameAr : l.unit.property.name}`,
-      new Date(l.startDate).toLocaleDateString(),
-      new Date(l.endDate).toLocaleDateString(),
-      String(l.rentAmount),
-      l.deposit ? String(l.deposit) : '',
-      getStatusLabel(l.status),
-    ]);
-    const csvContent = [headers, ...rows].map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'leases.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const cards = [
+    { title: t('activeLeases'), value: String(stats.activeLeases), icon: FileCheck, tone: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' },
+    { title: t('expiringSoon'), value: String(stats.expiringSoon), icon: Clock, tone: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
+    { title: t('totalMonthlyRevenue'), value: formatCurrency(stats.totalMonthlyRevenue), icon: DollarSign, tone: 'text-teal-600 bg-teal-50 dark:bg-teal-950/30' },
+  ];
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight gradient-text">{t('title')}</h1>
-          {leases.length > 0 && <Badge variant="secondary">{leases.length}</Badge>}
+          <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
+          {pagination.total > 0 && <Badge variant="secondary">{pagination.total}</Badge>}
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={exportCsv} disabled={leases.length === 0}><Download className="h-4 w-4 me-2" />{tc('exportCsv')}</Button>
-              <Button onClick={handleOpenAdd}><Plus className="h-4 w-4 me-2" />{t('addLease')}</Button>
-            </div>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{editingId ? t('editLease') : t('addLease')}</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('tenant')}</Label>
-                  <Select value={form.tenantId} onValueChange={v => setForm({ ...form, tenantId: v })}>
-                    <SelectTrigger><SelectValue placeholder={t('selectTenant')} /></SelectTrigger>
-                    <SelectContent>
-                      {tenantOptions.map(tn => (
-                        <SelectItem key={tn.id} value={tn.id}>{isAr && tn.nameAr ? tn.nameAr : tn.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('unit')}</Label>
-                  <Select value={form.unitId} onValueChange={v => setForm({ ...form, unitId: v })}>
-                    <SelectTrigger><SelectValue placeholder={t('selectUnit')} /></SelectTrigger>
-                    <SelectContent>
-                      {unitOptions.map(u => (
-                        <SelectItem key={u.id} value={u.id}>
-                          {u.unitNumber} - {isAr && u.property.nameAr ? u.property.nameAr : u.property.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('startDate')}</Label>
-                  <Input type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('endDate')}</Label>
-                  <Input type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label>{t('rentAmount')}</Label>
-                  <Input type="number" value={form.rentAmount} onChange={e => setForm({ ...form, rentAmount: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('deposit')}</Label>
-                  <Input type="number" value={form.deposit} onChange={e => setForm({ ...form, deposit: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('status')}</Label>
-                  <Select value={form.status} onValueChange={v => setForm({ ...form, status: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">{t('active')}</SelectItem>
-                      <SelectItem value="expired">{t('expired')}</SelectItem>
-                      <SelectItem value="terminated">{t('terminated')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>{tc('cancel')}</Button>
-              <Button onClick={handleSubmit} disabled={submitting || !form.unitId || !form.tenantId || !form.startDate || !form.endDate || !form.rentAmount}>
-                {submitting ? tc('loading') : tc('save')}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" disabled={!leases.length} onClick={() => exportRows(leases, 'leases.csv')}><Download className="me-2 h-4 w-4" />{tc('exportCsv')}</Button>
+          <Button onClick={openAdd}><Plus className="me-2 h-4 w-4" />{t('addLease')}</Button>
+        </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={!!deleteId} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{tc('confirmDeleteTitle')}</AlertDialogTitle>
-            <AlertDialogDescription>{t('confirmDelete')}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{tc('cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {tc('delete')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Card className="hover:shadow-md transition-shadow cursor-default">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">{t('activeLeases')}</p>
-                    <AnimatedCounter value={stats.activeLeases} className="text-2xl font-bold mt-1" />
-                  </div>
-                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30"><FileCheck className="h-5 w-5 text-emerald-600" /></div>
-                </div>
-              </CardContent>
-            </Card>
-          </TooltipTrigger>
-          <TooltipContent>{t('basedOnActiveLeases', { count: stats.activeLeases })}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Card className="hover:shadow-md transition-shadow cursor-default">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">{t('expiringSoon')}</p>
-                    <AnimatedCounter value={stats.expiringSoon} className="text-2xl font-bold mt-1" />
-                  </div>
-                  <div className="p-3 rounded-xl bg-yellow-50 dark:bg-yellow-950/30"><Clock className="h-5 w-5 text-yellow-600" /></div>
-                </div>
-              </CardContent>
-            </Card>
-          </TooltipTrigger>
-          <TooltipContent>{t('expiringWithin30Days')}</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Card className="hover:shadow-md transition-shadow cursor-default">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">{t('totalMonthlyRevenue')}</p>
-                    <AnimatedCounter value={stats.totalMonthlyRevenue} prefix="$" className="text-2xl font-bold mt-1" />
-                  </div>
-                  <div className="p-3 rounded-xl bg-teal-50 dark:bg-teal-950/30"><DollarSign className="h-5 w-5 text-teal-600" /></div>
-                </div>
-              </CardContent>
-            </Card>
-          </TooltipTrigger>
-          <TooltipContent>{t('basedOnActiveLeases', { count: stats.activeLeases })}</TooltipContent>
-        </Tooltip>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {cards.map(({ title, value, icon: Icon, tone }) => (
+          <Card key={title}><CardContent className="flex items-center justify-between p-5"><div><p className="text-sm text-muted-foreground">{title}</p><p className="mt-1 text-2xl font-semibold">{value}</p></div><div className={`rounded-xl p-3 ${tone}`}><Icon className="h-5 w-5" /></div></CardContent></Card>
+        ))}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue placeholder={t('allStatuses')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('allStatuses')}</SelectItem>
-            <SelectItem value="active">{t('active')}</SelectItem>
-            <SelectItem value="expired">{t('expired')}</SelectItem>
-            <SelectItem value="terminated">{t('terminated')}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder={t('allStatuses')} /></SelectTrigger>
+        <SelectContent><SelectItem value="all">{t('allStatuses')}</SelectItem><SelectItem value="active">{t('active')}</SelectItem><SelectItem value="expired">{t('expired')}</SelectItem><SelectItem value="terminated">{t('terminated')}</SelectItem></SelectContent>
+      </Select>
+
+      {error && <div role="alert" className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between"><span className="text-sm text-destructive">{error}</span><Button variant="outline" size="sm" onClick={() => void loadLeases()}>{tc('refresh')}</Button></div>}
 
       {loading ? (
-        <div className="space-y-4">
-          {/* Skeleton stat cards */}
-          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {[1, 2, 3].map(i => (
-              <Card key={i}>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-28" />
-                      <Skeleton className="h-7 w-16" />
-                    </div>
-                    <Skeleton className="h-11 w-11 rounded-xl" />
-                  </div>
-                </CardContent>
-              </Card>
+        <div className="space-y-3">{[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-16 w-full" />)}</div>
+      ) : !leases.length ? (
+        <EmptyState icon={FileText} title={t('title')} description={t('noLeasesDescription')} actionLabel={t('addLease')} onAction={openAdd} />
+      ) : (
+        <>
+          <div className="grid gap-3 md:hidden">
+            {leases.map((lease) => (
+              <Card key={lease.id}><CardContent className="space-y-3 p-4">
+                <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><Checkbox checked={selectedIds.has(lease.id)} onCheckedChange={() => toggleSelected(lease.id)} aria-label={tc('selected')} /><div className="min-w-0"><p className="truncate font-semibold">{isAr && lease.tenant.nameAr ? lease.tenant.nameAr : lease.tenant.name}</p><p className="truncate text-xs text-muted-foreground">{lease.unit.unitNumber} · {isAr && lease.unit.property.nameAr ? lease.unit.property.nameAr : lease.unit.property.name}</p></div></div><Badge className={STATUS_COLORS[lease.status] || DEFAULT_STATUS_COLOR}>{statusLabel(lease.status)}</Badge></div>
+                <div className="grid grid-cols-2 gap-2 text-sm"><div><span className="text-muted-foreground">{t('rentAmount')}</span><p className="font-medium">{formatCurrency(lease.rentAmount)}</p></div><div><span className="text-muted-foreground">{t('endDate')}</span><p>{formatDate(lease.endDate)}</p></div></div>
+                <div className="flex items-center justify-between border-t pt-2"><span className="text-xs text-muted-foreground">{lease._count.payments} {tc('results').toLowerCase()}</span><div className="flex gap-1"><Button variant="ghost" size="icon" aria-label={tc('edit')} onClick={() => openEdit(lease)}><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="text-destructive" aria-label={tc('delete')} onClick={() => setDeleteId(lease.id)}><Trash2 className="h-4 w-4" /></Button></div></div>
+              </CardContent></Card>
             ))}
           </div>
-          {/* Skeleton table */}
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (
-                    <TableHead key={i}><Skeleton className="h-4 w-16" /></TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {[1, 2, 3, 4, 5].map(row => (
-                  <TableRow key={row}>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-14" /></TableCell>
-                    <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="h-6 w-12 rounded-full" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-14" /></TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
+
+          <div className="hidden overflow-x-auto rounded-lg border md:block">
+            <Table><TableHeader><TableRow className="bg-muted/50"><TableHead className="w-10"><Checkbox checked={selectedIds.size === leases.length} onCheckedChange={(checked) => checked ? selectAll() : clearSelection()} aria-label={tc('selectAll')} /></TableHead><TableHead>{t('tenant')}</TableHead><TableHead>{t('unitProperty')}</TableHead><TableHead>{t('startDate')}</TableHead><TableHead>{t('endDate')}</TableHead><TableHead>{t('rentAmount')}</TableHead><TableHead>{t('deposit')}</TableHead><TableHead>{t('status')}</TableHead><TableHead>{tc('details')}</TableHead><TableHead className="w-20">{tc('actions')}</TableHead></TableRow></TableHeader>
+              <TableBody>{leases.map((lease) => <TableRow key={lease.id} className={selectedIds.has(lease.id) ? 'bg-primary/5' : ''}><TableCell><Checkbox checked={selectedIds.has(lease.id)} onCheckedChange={() => toggleSelected(lease.id)} aria-label={tc('selected')} /></TableCell><TableCell className="font-medium">{isAr && lease.tenant.nameAr ? lease.tenant.nameAr : lease.tenant.name}</TableCell><TableCell>{lease.unit.unitNumber} · {isAr && lease.unit.property.nameAr ? lease.unit.property.nameAr : lease.unit.property.name}</TableCell><TableCell>{formatDate(lease.startDate)}</TableCell><TableCell>{formatDate(lease.endDate)}</TableCell><TableCell>{formatCurrency(lease.rentAmount)}</TableCell><TableCell>{lease.deposit == null ? '—' : formatCurrency(lease.deposit)}</TableCell><TableCell><Badge className={STATUS_COLORS[lease.status] || DEFAULT_STATUS_COLOR}>{statusLabel(lease.status)}</Badge></TableCell><TableCell><Badge variant="secondary">{lease._count.payments}</Badge></TableCell><TableCell><div className="flex gap-1"><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" aria-label={tc('edit')} onClick={() => openEdit(lease)}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>{tc('edit')}</TooltipContent></Tooltip><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive" aria-label={tc('delete')} onClick={() => setDeleteId(lease.id)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>{tc('delete')}</TooltipContent></Tooltip></div></TableCell></TableRow>)}</TableBody>
             </Table>
           </div>
-        </div>
-      ) : leases.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          title={t('title')}
-          description={t('noLeasesDescription')}
-          actionLabel={t('addLease')}
-          onAction={handleOpenAdd}
-        />
-      ) : isMobile ? (
-        <div className="grid gap-3">
-          {leases.map(l => (
-            <Card
-              key={l.id}
-              className="group hover:shadow-lg hover:scale-[1.01] transition-all duration-200"
-            >
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={selectedIds.has(l.id)}
-                      onCheckedChange={() => toggleSelect(l.id)}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-semibold">
-                      {isAr && l.tenant.nameAr ? l.tenant.nameAr : l.tenant.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Badge className={STATUS_COLORS[l.status] || DEFAULT_STATUS_COLOR}>
-                      {getStatusLabel(l.status)}
-                    </Badge>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={(e) => { e.stopPropagation(); handleOpenEdit(l); }}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{tc('edit')}</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteId(l.id); }}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>{tc('delete')}</TooltipContent>
-                    </Tooltip>
-                  </div>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {l.unit.unitNumber} · {isAr && l.unit.property.nameAr ? l.unit.property.nameAr : l.unit.property.name}
-                </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                  <span>{t('startDate')}: {new Date(l.startDate).toLocaleDateString()}</span>
-                  <span>{t('endDate')}: {new Date(l.endDate).toLocaleDateString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold">{tc('currency')}{l.rentAmount.toLocaleString()}</span>
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                    {l.deposit && <span>{tc('currency')}{l.deposit.toLocaleString()}</span>}
-                    <Badge variant="secondary" className="font-normal">
-                      {l._count.payments} {tc('results').toLowerCase()}
-                    </Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50 backdrop-blur-sm sticky top-0">
-                <TableHead className="w-[40px]">
-                  <Checkbox
-                    checked={selectedIds.size === leases.length && leases.length > 0}
-                    onCheckedChange={(checked) => { if (checked) selectAll(); else clearSelection(); }}
-                  />
-                </TableHead>
-                <TableHead>{t('tenant')}</TableHead>
-                <TableHead>{t('unitProperty')}</TableHead>
-                <TableHead>{t('startDate')}</TableHead>
-                <TableHead>{t('endDate')}</TableHead>
-                <TableHead>{t('rentAmount')}</TableHead>
-                <TableHead>{t('deposit')}</TableHead>
-                <TableHead>{t('status')}</TableHead>
-                <TableHead>{tc('details')}</TableHead>
-                <TableHead className="w-[80px]">{tc('actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {leases.map((l, idx) => (
-                <TableRow key={l.id} className={`hover:bg-muted/50 ${idx % 2 === 1 ? 'bg-muted/20' : ''} ${selectedIds.has(l.id) ? 'bg-primary/5' : ''}`}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.has(l.id)}
-                      onCheckedChange={() => toggleSelect(l.id)}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {isAr && l.tenant.nameAr ? l.tenant.nameAr : l.tenant.name}
-                  </TableCell>
-                  <TableCell>
-                    {l.unit.unitNumber} · {isAr && l.unit.property.nameAr ? l.unit.property.nameAr : l.unit.property.name}
-                  </TableCell>
-                  <TableCell>{new Date(l.startDate).toLocaleDateString()}</TableCell>
-                  <TableCell>{new Date(l.endDate).toLocaleDateString()}</TableCell>
-                  <TableCell>{tc('currency')}{l.rentAmount.toLocaleString()}</TableCell>
-                  <TableCell>{l.deposit ? `${tc('currency')}${l.deposit.toLocaleString()}` : '-'}</TableCell>
-                  <TableCell>
-                    <Badge className={STATUS_COLORS[l.status] || DEFAULT_STATUS_COLOR}>
-                      {getStatusLabel(l.status)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    <Badge variant="secondary" className="font-normal">
-                      {l._count.payments} {tc('results').toLowerCase()}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-0.5">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => handleOpenEdit(l)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{tc('edit')}</TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" onClick={() => setDeleteId(l.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{tc('delete')}</TooltipContent>
-                      </Tooltip>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+
+          {pagination.totalPages > 1 && <div className="flex items-center justify-between gap-3"><p className="text-sm text-muted-foreground">{tc('showing')} {leases.length} {tc('of')} {pagination.total}</p><div className="flex gap-2"><Button variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => void loadLeases(pagination.page - 1)}>{tc('previous')}</Button><Button variant="outline" size="sm" disabled={pagination.page >= pagination.totalPages} onClick={() => void loadLeases(pagination.page + 1)}>{tc('next')}</Button></div></div>}
+        </>
       )}
 
-      {/* Bulk Actions Bar */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto"><DialogHeader><DialogTitle>{editingId ? t('editLease') : t('addLease')}</DialogTitle></DialogHeader><div className="grid gap-4 py-2">
+          <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>{t('tenant')}</Label><Select value={form.tenantId} onValueChange={(value) => setForm((current) => ({ ...current, tenantId: value }))}><SelectTrigger><SelectValue placeholder={t('selectTenant')} /></SelectTrigger><SelectContent>{tenantOptions.map((tenant) => <SelectItem key={tenant.id} value={tenant.id}>{isAr && tenant.nameAr ? tenant.nameAr : tenant.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{t('unit')}</Label><Select value={form.unitId} onValueChange={(value) => setForm((current) => ({ ...current, unitId: value }))}><SelectTrigger><SelectValue placeholder={t('selectUnit')} /></SelectTrigger><SelectContent>{selectableUnits.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.unitNumber} · {isAr && unit.property.nameAr ? unit.property.nameAr : unit.property.name}</SelectItem>)}</SelectContent></Select></div></div>
+          <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>{t('startDate')}</Label><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></div><div className="space-y-2"><Label>{t('endDate')}</Label><Input type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></div></div>
+          <div className="grid gap-4 sm:grid-cols-3"><div className="space-y-2"><Label>{t('rentAmount')}</Label><Input type="number" min="0" step="0.01" value={form.rentAmount} onChange={(event) => setForm((current) => ({ ...current, rentAmount: event.target.value }))} /></div><div className="space-y-2"><Label>{t('deposit')}</Label><Input type="number" min="0" step="0.01" value={form.deposit} onChange={(event) => setForm((current) => ({ ...current, deposit: event.target.value }))} /></div><div className="space-y-2"><Label>{t('status')}</Label><Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">{t('active')}</SelectItem><SelectItem value="expired">{t('expired')}</SelectItem><SelectItem value="terminated">{t('terminated')}</SelectItem></SelectContent></Select></div></div>
+        </div><DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>{tc('cancel')}</Button><Button onClick={() => void handleSubmit()} disabled={submitting || !form.unitId || !form.tenantId || !form.startDate || !form.endDate || !form.rentAmount}>{submitting ? tc('loading') : tc('save')}</Button></DialogFooter></DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteId)} onOpenChange={(open) => !open && setDeleteId(null)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>{tc('confirmDeleteTitle')}</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">{t('confirmDelete')}</p><DialogFooter><Button variant="outline" onClick={() => setDeleteId(null)}>{tc('cancel')}</Button><Button variant="destructive" onClick={() => void deleteLease()}>{tc('delete')}</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>{tc('confirmDeleteTitle')}</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">{tc('confirmBulkDelete', { count: selectedIds.size })}</p><DialogFooter><Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>{tc('cancel')}</Button><Button variant="destructive" onClick={() => void bulkDelete()}>{tc('delete')}</Button></DialogFooter></DialogContent></Dialog>
+
       <BulkActionsBar
         selectedCount={selectedIds.size}
         totalCount={leases.length}
         onSelectAll={selectAll}
         onClearSelection={clearSelection}
         onDelete={() => setBulkDeleteOpen(true)}
-        onExport={handleBulkExport}
-        onChangeStatus={
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-                <ChevronDown className="h-3.5 w-3.5" />
-                {tc('changeStatus')}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => handleBulkChangeStatus('active')}>{t('active')}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleBulkChangeStatus('expired')}>{t('expired')}</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleBulkChangeStatus('terminated')}>{t('terminated')}</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        }
+        onExport={() => exportRows(leases.filter((lease) => selectedIds.has(lease.id)), 'leases-selected.csv')}
+        onChangeStatus={<DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs"><ChevronDown className="h-3.5 w-3.5" />{tc('changeStatus')}</Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuItem onClick={() => void bulkStatus('active')}>{t('active')}</DropdownMenuItem><DropdownMenuItem onClick={() => void bulkStatus('expired')}>{t('expired')}</DropdownMenuItem><DropdownMenuItem onClick={() => void bulkStatus('terminated')}>{t('terminated')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}
       />
-
-      {/* Bulk Delete Confirmation */}
-      <AlertDialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{tc('confirmDeleteTitle')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {tc('confirmBulkDelete', { count: selectedIds.size })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{tc('cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {tc('delete')}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

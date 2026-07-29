@@ -1,29 +1,27 @@
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { rateLimit } from '@/lib/validation';
+import { apiError, requestRateLimit } from '@/lib/api';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const rateLimitResult = rateLimit();
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-    }
+    const limitResult = requestRateLimit(request, 'properties:detail');
+    if (!limitResult.success) return apiError('Too many requests', 429);
 
     const { id } = await params;
-
     const property = await db.property.findUnique({
       where: { id },
       include: {
         manager: true,
         units: {
           include: {
-            lease: {
-              include: {
-                tenant: true,
-              },
+            leases: {
+              where: { status: 'active' },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              include: { tenant: true },
             },
           },
           orderBy: { unitNumber: 'asc' },
@@ -39,45 +37,38 @@ export async function GET(
       },
     });
 
-    if (!property) {
-      return NextResponse.json({ error: 'Property not found' }, { status: 404 });
-    }
+    if (!property) return apiError('Property not found', 404);
 
     const totalUnits = property.units.length;
-    const occupiedUnits = property.units.filter((u) => u.status === 'rented').length;
-    const availableUnits = property.units.filter((u) => u.status === 'available').length;
-    const maintenanceUnits = property.units.filter((u) => u.status === 'maintenance').length;
-    const occupancyRate = totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0;
-    const monthlyRevenue = property.units
-      .filter((u) => u.status === 'rented')
-      .reduce((sum, u) => sum + u.rentAmount, 0);
-    const totalRent = property.units.reduce((sum, u) => sum + u.rentAmount, 0);
-    const averageRent = totalUnits > 0 ? Math.round(totalRent / totalUnits) : 0;
+    const occupiedUnits = property.units.filter((unit) => unit.leases.length > 0).length;
+    const maintenanceUnits = property.units.filter(
+      (unit) => unit.leases.length === 0 && unit.status === 'maintenance',
+    ).length;
+    const availableUnits = Math.max(0, totalUnits - occupiedUnits - maintenanceUnits);
+    const totalRent = property.units.reduce((sum, unit) => sum + unit.rentAmount, 0);
+    const monthlyRevenue = property.units.reduce(
+      (sum, unit) => sum + (unit.leases[0]?.rentAmount ?? 0),
+      0,
+    );
 
-    const unitsWithTenant = property.units.map((u) => ({
-      id: u.id,
-      unitNumber: u.unitNumber,
-      floor: u.floor,
-      rooms: u.rooms,
-      bathrooms: u.bathrooms,
-      area: u.area,
-      rentAmount: u.rentAmount,
-      status: u.status,
-      tenant: u.lease?.tenant
-        ? { name: u.lease.tenant.name, nameAr: u.lease.tenant.nameAr }
+    const units = property.units.map(({ leases, ...unit }) => ({
+      ...unit,
+      status: leases.length > 0 ? 'rented' : unit.status === 'rented' ? 'available' : unit.status,
+      tenant: leases[0]?.tenant
+        ? { name: leases[0].tenant.name, nameAr: leases[0].tenant.nameAr }
         : null,
     }));
 
-    const recentMaintenance = property.maintenanceRequests.map((m) => ({
-      id: m.id,
-      title: m.title,
-      titleAr: m.titleAr,
-      status: m.status,
-      priority: m.priority,
-      category: m.category,
-      unitNumber: m.unit?.unitNumber,
-      tenantName: m.tenant?.name,
-      createdAt: m.createdAt,
+    const recentMaintenance = property.maintenanceRequests.map((requestItem) => ({
+      id: requestItem.id,
+      title: requestItem.title,
+      titleAr: requestItem.titleAr,
+      status: requestItem.status,
+      priority: requestItem.priority,
+      category: requestItem.category,
+      unitNumber: requestItem.unit?.unitNumber,
+      tenantName: requestItem.tenant?.name,
+      createdAt: requestItem.createdAt,
     }));
 
     return NextResponse.json({
@@ -101,16 +92,16 @@ export async function GET(
         occupiedUnits,
         availableUnits,
         maintenanceUnits,
-        occupancyRate,
+        occupancyRate: totalUnits > 0 ? Math.round((occupiedUnits / totalUnits) * 100) : 0,
         monthlyRevenue,
-        averageRent,
+        averageRent: totalUnits > 0 ? Math.round(totalRent / totalUnits) : 0,
         totalRent,
       },
-      units: unitsWithTenant,
+      units,
       recentMaintenance,
     });
   } catch (error) {
     console.error('Property detail API error:', error);
-    return NextResponse.json({ error: 'Failed to fetch property' }, { status: 500 });
+    return apiError('Failed to fetch property', 500);
   }
 }

@@ -1,57 +1,52 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { rateLimit } from '@/lib/validation';
+import { NextRequest, NextResponse } from 'next/server';
+import { apiError, requestRateLimit } from '@/lib/api';
 
-export async function GET(req: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const rateLimitResult = rateLimit();
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-    }
+    const limitResult = requestRateLimit(request, 'health-score:read', { maxRequests: 60 });
+    if (!limitResult.success) return apiError('Too many requests', 429);
 
-    // Run all independent queries in parallel
     const [
-      unitStats,
-      activeLeases,
-      paidCount,
-      totalPaymentCount,
+      totalUnits,
+      occupiedUnits,
+      duePayments,
       openMaintenance,
       urgentOpen,
       totalMaintenance,
+      resolvedMaintenance,
+      activeLeases,
       expiredLeases,
       terminatedLeases,
-      propertyData,
+      properties,
       maintenanceByProperty,
     ] = await Promise.all([
-      // Unit stats via groupBy (1 query instead of loading all units)
-      db.unit.groupBy({
-        by: ['status'],
-        _count: { status: true },
+      db.unit.count(),
+      db.unit.count({ where: { leases: { some: { status: 'active' } } } }),
+      db.payment.findMany({
+        select: { amount: true, status: true, lease: { select: { rentAmount: true } } },
       }),
-      // Active leases for revenue (select only needed fields)
-      db.lease.findMany({
-        where: { status: 'active' },
-        select: { rentAmount: true },
-      }),
-      db.payment.count({ where: { status: 'paid' } }),
-      db.payment.count(),
       db.maintenanceRequest.count({ where: { status: { in: ['open', 'in_progress'] } } }),
-      db.maintenanceRequest.count({ where: { status: { in: ['open', 'in_progress'] }, priority: 'urgent' } }),
+      db.maintenanceRequest.count({
+        where: { status: { in: ['open', 'in_progress'] }, priority: 'urgent' },
+      }),
       db.maintenanceRequest.count(),
+      db.maintenanceRequest.count({ where: { status: { in: ['resolved', 'closed'] } } }),
+      db.lease.count({ where: { status: 'active' } }),
       db.lease.count({ where: { status: 'expired' } }),
       db.lease.count({ where: { status: 'terminated' } }),
-      // Properties with unit counts (select only needed fields)
       db.property.findMany({
         select: {
           id: true,
           name: true,
           nameAr: true,
           units: {
-            select: { status: true },
+            select: {
+              leases: { where: { status: 'active' }, select: { id: true }, take: 1 },
+            },
           },
         },
       }),
-      // Maintenance counts grouped by property (1 query instead of N)
       db.maintenanceRequest.groupBy({
         by: ['propertyId'],
         _count: { id: true },
@@ -59,70 +54,61 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // Compute unit stats from groupBy result
-    const totalUnits = unitStats.reduce((sum, s) => sum + s._count.status, 0);
-    const occupiedUnits = unitStats.find(s => s.status === 'rented')?._count.status ?? 0;
     const occupancyRate = totalUnits > 0 ? (occupiedUnits / totalUnits) * 100 : 0;
+    const expectedPayments = duePayments.reduce((sum, payment) => {
+      if (payment.status === 'partial') return sum + Math.max(payment.amount, payment.lease.rentAmount);
+      return sum + payment.amount;
+    }, 0);
+    const collectedPayments = duePayments.reduce((sum, payment) => {
+      return payment.status === 'paid' || payment.status === 'partial' ? sum + payment.amount : sum;
+    }, 0);
+    const collectionRate = expectedPayments > 0 ? Math.min(100, (collectedPayments / expectedPayments) * 100) : 100;
+    const maintenanceRate = totalMaintenance > 0 ? (resolvedMaintenance / totalMaintenance) * 100 : 100;
+    const leaseHistoryCount = activeLeases + expiredLeases + terminatedLeases;
+    const renewalRate = leaseHistoryCount > 0 ? (activeLeases / leaseHistoryCount) * 100 : 100;
 
-    const totalMonthlyRevenue = activeLeases.reduce((sum, l) => sum + l.rentAmount, 0);
-    const collectionRate = totalPaymentCount > 0 ? (paidCount / totalPaymentCount) * 100 : 100;
-    const maintenanceRate = totalMaintenance > 0 ? ((totalMaintenance - openMaintenance) / totalMaintenance) * 100 : 100;
-
-    const totalLeaseHistory = activeLeases.length + expiredLeases + terminatedLeases;
-    const renewalRate = totalLeaseHistory > 0 ? (activeLeases.length / totalLeaseHistory) * 100 : 100;
-
-    // Calculate weighted health score (0-100)
-    const weights = {
-      occupancy: 0.30,
-      collection: 0.25,
-      maintenance: 0.25,
-      renewal: 0.20,
-    };
-
+    const weights = { occupancy: 0.3, collection: 0.3, maintenance: 0.25, renewal: 0.15 };
     const score = Math.round(
       occupancyRate * weights.occupancy +
       collectionRate * weights.collection +
       maintenanceRate * weights.maintenance +
-      renewalRate * weights.renewal
+      renewalRate * weights.renewal,
     );
 
-    // Determine grade
-    let grade: string;
-    let gradeColor: string;
-    if (score >= 90) { grade = 'A'; gradeColor = '#22c55e'; }
-    else if (score >= 80) { grade = 'B'; gradeColor = '#14b8a6'; }
-    else if (score >= 70) { grade = 'C'; gradeColor = '#f59e0b'; }
-    else if (score >= 60) { grade = 'D'; gradeColor = '#f97316'; }
-    else { grade = 'F'; gradeColor = '#ef4444'; }
+    const grade = score >= 90 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
+    const gradeColor = score >= 90
+      ? '#22c55e'
+      : score >= 80
+        ? '#14b8a6'
+        : score >= 70
+          ? '#f59e0b'
+          : score >= 60
+            ? '#f97316'
+            : '#ef4444';
 
-    // Build maintenance lookup from groupBy result
-    const maintenanceMap = new Map(maintenanceByProperty.map(m => [m.propertyId, m._count.id]));
-
-    // Per-property scores (no N+1 — uses pre-fetched data)
-    const propertyScores = propertyData.map((p) => {
-      const pUnits = p.units.length;
-      const pOccupied = p.units.filter(u => u.status === 'rented').length;
-      const pOccupancy = pUnits > 0 ? (pOccupied / pUnits) * 100 : 0;
-      const pOpenMaintenance = maintenanceMap.get(p.id) ?? 0;
-
-      const pScore = Math.round(pOccupancy * 0.6 + (pOpenMaintenance === 0 ? 100 : Math.max(0, 100 - pOpenMaintenance * 20)) * 0.4);
-      let pGrade: string;
-      if (pScore >= 90) pGrade = 'A';
-      else if (pScore >= 80) pGrade = 'B';
-      else if (pScore >= 70) pGrade = 'C';
-      else if (pScore >= 60) pGrade = 'D';
-      else pGrade = 'F';
+    const maintenanceMap = new Map(
+      maintenanceByProperty.map((entry) => [entry.propertyId, entry._count.id]),
+    );
+    const propertyScores = properties.map((property) => {
+      const propertyUnits = property.units.length;
+      const propertyOccupied = property.units.filter((unit) => unit.leases.length > 0).length;
+      const propertyOccupancy = propertyUnits > 0 ? (propertyOccupied / propertyUnits) * 100 : 0;
+      const propertyOpenMaintenance = maintenanceMap.get(property.id) ?? 0;
+      const maintenanceComponent = propertyOpenMaintenance === 0
+        ? 100
+        : Math.max(0, 100 - propertyOpenMaintenance * 20);
+      const propertyScore = Math.round(propertyOccupancy * 0.65 + maintenanceComponent * 0.35);
 
       return {
-        id: p.id,
-        name: p.name,
-        nameAr: p.nameAr,
-        score: pScore,
-        grade: pGrade,
-        occupancy: pOccupancy,
-        totalUnits: pUnits,
-        occupiedUnits: pOccupied,
-        openMaintenance: pOpenMaintenance,
+        id: property.id,
+        name: property.name,
+        nameAr: property.nameAr,
+        score: propertyScore,
+        grade: propertyScore >= 90 ? 'A' : propertyScore >= 80 ? 'B' : propertyScore >= 70 ? 'C' : propertyScore >= 60 ? 'D' : 'F',
+        occupancy: propertyOccupancy,
+        totalUnits: propertyUnits,
+        occupiedUnits: propertyOccupied,
+        openMaintenance: propertyOpenMaintenance,
       };
     });
 
@@ -137,16 +123,16 @@ export async function GET(req: NextRequest) {
         renewal: { value: renewalRate, weight: weights.renewal },
       },
       summary: {
-        totalProperties: propertyData.length,
+        totalProperties: properties.length,
         totalUnits,
         occupiedUnits,
         occupancyRate: Math.round(occupancyRate * 10) / 10,
-        totalMonthlyRevenue,
+        totalMonthlyRevenue: collectedPayments,
         collectionRate: Math.round(collectionRate * 10) / 10,
         openMaintenance,
         urgentOpen,
         maintenanceRate: Math.round(maintenanceRate * 10) / 10,
-        activeLeases: activeLeases.length,
+        activeLeases,
         renewalRate: Math.round(renewalRate * 10) / 10,
       },
       propertyScores,
@@ -155,6 +141,6 @@ export async function GET(req: NextRequest) {
     return response;
   } catch (error) {
     console.error('Health score error:', error);
-    return NextResponse.json({ error: 'Failed to calculate health score' }, { status: 500 });
+    return apiError('Failed to calculate health score', 500);
   }
 }

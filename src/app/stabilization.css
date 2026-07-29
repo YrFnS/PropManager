@@ -1,0 +1,25 @@
+/* Chart tokens are stored as HSL channels because Recharts consumes them via
+   hsl(var(--chart-*)); Tailwind receives the fully composed color below. */
+@theme inline {
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+}
+
+:root {
+  --chart-1: 24 95% 53%;
+  --chart-2: 173 58% 39%;
+  --chart-3: 197 37% 24%;
+  --chart-4: 43 96% 56%;
+  --chart-5: 27 87% 55%;
+}
+
+.dark {
+  --chart-1: 221 83% 58%;
+  --chart-2: 160 72% 45%;
+  --chart-3: 38 92% 55%;
+  --chart-4: 280 76% 65%;
+  --chart-5: 340 82% 60%;
+}

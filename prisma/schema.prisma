@@ -8,24 +8,24 @@ datasource db {
 }
 
 model Property {
-  id            String   @id @default(cuid())
-  name          String
-  nameAr        String?
-  address       String
-  addressAr     String?
-  city          String
-  cityAr        String?
-  state         String?
-  zipCode       String?
-  description   String?
-  descriptionAr String?
-  type          String   @default("residential") // residential, commercial, mixed
-  totalUnits    Int      @default(0)
-  image         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  units         Unit[]
-  manager       PropertyManager?
+  id                  String               @id @default(cuid())
+  name                String
+  nameAr              String?
+  address             String
+  addressAr           String?
+  city                String
+  cityAr              String?
+  state               String?
+  zipCode             String?
+  description         String?
+  descriptionAr       String?
+  type                String               @default("residential")
+  totalUnits          Int                  @default(0)
+  image               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  units               Unit[]
+  manager             PropertyManager?
   maintenanceRequests MaintenanceRequest[]
 
   @@index([type])
@@ -43,58 +43,60 @@ model PropertyManager {
 }
 
 model Unit {
-  id          String   @id @default(cuid())
-  propertyId  String
-  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  unitNumber  String
-  floor       Int?
-  rooms       Int
-  bathrooms   Float    @default(1)
-  area        Float?
-  rentAmount  Float
-  status      String   @default("available") // available, rented, maintenance
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  lease       Lease?
+  id                  String               @id @default(cuid())
+  propertyId          String
+  property            Property             @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  unitNumber          String
+  floor               Int?
+  rooms               Int
+  bathrooms           Float                @default(1)
+  area                Float?
+  rentAmount          Float
+  status              String               @default("available")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  leases              Lease[]
   maintenanceRequests MaintenanceRequest[]
 
+  @@unique([propertyId, unitNumber])
   @@index([propertyId])
   @@index([status])
 }
 
 model Tenant {
-  id               String   @id @default(cuid())
-  name             String
-  nameAr           String?
-  email            String   @unique
-  phone            String?
-  nationalId       String?
-  emergencyContact String?
-  status           String   @default("active") // active, inactive
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  leases           Lease[]
+  id                  String               @id @default(cuid())
+  name                String
+  nameAr              String?
+  email               String               @unique
+  phone               String?
+  nationalId          String?
+  emergencyContact    String?
+  status              String               @default("active")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  leases              Lease[]
   maintenanceRequests MaintenanceRequest[]
-  payments         Payment[]
+  payments            Payment[]
 
   @@index([status])
 }
 
 model Lease {
-  id         String   @id @default(cuid())
-  unitId     String   @unique
-  unit       Unit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  id         String    @id @default(cuid())
+  unitId     String
+  unit       Unit      @relation(fields: [unitId], references: [id], onDelete: Restrict)
   tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   startDate  DateTime
   endDate    DateTime
   rentAmount Float
   deposit    Float?
-  status     String   @default("active") // active, expired, terminated
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  status     String    @default("active")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
   payments   Payment[]
 
+  @@index([unitId])
   @@index([tenantId])
   @@index([status])
   @@index([endDate])
@@ -103,14 +105,14 @@ model Lease {
 model Payment {
   id        String   @id @default(cuid())
   leaseId   String
-  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  lease     Lease    @relation(fields: [leaseId], references: [id], onDelete: Restrict)
   tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   amount    Float
   dueDate   DateTime
   paidDate  DateTime?
-  status    String   @default("pending") // pending, paid, late, partial
-  method    String?  // cash, bank_transfer, online, check
+  status    String   @default("pending")
+  method    String?
   reference String?
   notes     String?
   createdAt DateTime @default(now())
@@ -123,24 +125,24 @@ model Payment {
 }
 
 model MaintenanceRequest {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   propertyId    String
-  property      Property @relation(fields: [propertyId], references: [id])
+  property      Property  @relation(fields: [propertyId], references: [id], onDelete: Restrict)
   unitId        String?
-  unit          Unit?    @relation(fields: [unitId], references: [id])
+  unit          Unit?     @relation(fields: [unitId], references: [id], onDelete: Restrict)
   tenantId      String?
-  tenant        Tenant?  @relation(fields: [tenantId], references: [id])
+  tenant        Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   title         String
   titleAr       String?
   description   String
   descriptionAr String?
-  priority      String   @default("medium") // low, medium, high, urgent
-  status        String   @default("open") // open, in_progress, resolved, closed
-  category      String   @default("other") // plumbing, electrical, structural, appliance, hvac, other
+  priority      String    @default("medium")
+  status        String    @default("open")
+  category      String    @default("other")
   assignedTo    String?
   completedAt   DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([propertyId])
   @@index([status])
@@ -154,7 +156,7 @@ model Message {
   subject     String
   content     String
   isRead      Boolean  @default(false)
-  category    String   @default("general") // general, maintenance, payment, lease, other
+  category    String   @default("general")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

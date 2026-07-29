@@ -1,33 +1,56 @@
+import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { rateLimit, propertySchema, sanitizeString } from '@/lib/validation';
+import { apiError, getPagination, isPrismaError, requestRateLimit } from '@/lib/api';
+import { auditEntry } from '@/lib/audit';
+import {
+  propertyManagerSchema,
+  propertySchema,
+  propertyUpdateSchema,
+  sanitizeString,
+} from '@/lib/validation';
+
+function sanitizeManager(manager: unknown) {
+  if (manager === null || manager === undefined) return manager;
+  if (typeof manager === 'object') {
+    const values = Object.values(manager as Record<string, unknown>);
+    if (values.every((value) => value === null || value === undefined || String(value).trim() === '')) return null;
+  }
+  const parsed = propertyManagerSchema.safeParse(manager);
+  if (!parsed.success) return parsed;
+  return {
+    success: true as const,
+    data: {
+      name: sanitizeString(parsed.data.name, 200),
+      nameAr: parsed.data.nameAr ? sanitizeString(parsed.data.nameAr, 200) : null,
+      email: sanitizeString(parsed.data.email, 200),
+      phone: parsed.data.phone ? sanitizeString(parsed.data.phone, 50) : null,
+    },
+  };
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const rateLimitResult = rateLimit();
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-    }
+    const limitResult = requestRateLimit(request, 'properties:read');
+    if (!limitResult.success) return apiError('Too many requests', 429);
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search') || '';
     const type = searchParams.get('type') || '';
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50')));
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = getPagination(searchParams);
+    const where: Prisma.PropertyWhereInput = {};
 
-    const where: any = {};
     if (search) {
       where.OR = [
-        { name: { contains: search } },
-        { nameAr: { contains: search } },
-        { city: { contains: search } },
-        { address: { contains: search } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { nameAr: { contains: search, mode: 'insensitive' } },
+        { city: { contains: search, mode: 'insensitive' } },
+        { cityAr: { contains: search, mode: 'insensitive' } },
+        { address: { contains: search, mode: 'insensitive' } },
+        { addressAr: { contains: search, mode: 'insensitive' } },
       ];
     }
-    if (type) {
-      where.type = type;
-    }
+    if (type && type !== 'all') where.type = type;
 
     const [properties, total] = await Promise.all([
       db.property.findMany({
@@ -38,7 +61,11 @@ export async function GET(request: NextRequest) {
           manager: true,
           _count: { select: { units: true } },
           units: {
-            select: { status: true, rentAmount: true },
+            select: {
+              status: true,
+              rentAmount: true,
+              leases: { where: { status: 'active' }, select: { rentAmount: true }, take: 1 },
+            },
           },
         },
         orderBy: { createdAt: 'desc' },
@@ -46,237 +73,193 @@ export async function GET(request: NextRequest) {
       db.property.count({ where }),
     ]);
 
-    const data = properties.map((p) => {
-      const occupied = p.units.filter((u) => u.status === 'rented').length;
-      const available = p.units.filter((u) => u.status === 'available').length;
-      const maintenance = p.units.filter((u) => u.status === 'maintenance').length;
-      const totalRent = p.units.reduce((sum, u) => sum + u.rentAmount, 0);
+    const data = properties.map((property) => {
+      const occupiedUnits = property.units.filter((unit) => unit.leases.length > 0).length;
+      const maintenanceUnits = property.units.filter(
+        (unit) => unit.leases.length === 0 && unit.status === 'maintenance',
+      ).length;
+      const unitCount = property._count.units;
+      const availableUnits = Math.max(0, unitCount - occupiedUnits - maintenanceUnits);
+      const totalRent = property.units.reduce(
+        (sum, unit) => sum + (unit.leases[0]?.rentAmount ?? 0),
+        0,
+      );
 
       return {
-        id: p.id,
-        name: p.name,
-        nameAr: p.nameAr,
-        address: p.address,
-        addressAr: p.addressAr,
-        city: p.city,
-        cityAr: p.cityAr,
-        state: p.state,
-        zipCode: p.zipCode,
-        description: p.description,
-        descriptionAr: p.descriptionAr,
-        type: p.type,
-        totalUnits: p.totalUnits,
-        image: p.image,
-        createdAt: p.createdAt,
-        manager: p.manager,
-        unitCount: p._count.units,
-        occupiedUnits: occupied,
-        availableUnits: available,
-        maintenanceUnits: maintenance,
+        id: property.id,
+        name: property.name,
+        nameAr: property.nameAr,
+        address: property.address,
+        addressAr: property.addressAr,
+        city: property.city,
+        cityAr: property.cityAr,
+        state: property.state,
+        zipCode: property.zipCode,
+        description: property.description,
+        descriptionAr: property.descriptionAr,
+        type: property.type,
+        totalUnits: unitCount,
+        image: property.image,
+        createdAt: property.createdAt,
+        manager: property.manager,
+        unitCount,
+        occupiedUnits,
+        availableUnits,
+        maintenanceUnits,
         totalRent,
-        occupancyRate: p._count.units > 0 ? Math.round((occupied / p._count.units) * 100) : 0,
+        occupancyRate: unitCount > 0 ? Math.round((occupiedUnits / unitCount) * 100) : 0,
       };
     });
 
     const response = NextResponse.json({
       data,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
     response.headers.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10');
     return response;
   } catch (error) {
-    console.error('Properties API error:', error);
-    return NextResponse.json({ error: 'Failed to fetch properties' }, { status: 500 });
+    console.error('Properties GET error:', error);
+    return apiError('Failed to fetch properties', 500);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const rateLimitResult = rateLimit();
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-    }
+    const limitResult = requestRateLimit(request, 'properties:write', { maxRequests: 60 });
+    if (!limitResult.success) return apiError('Too many requests', 429);
 
     const body = await request.json();
-
     const parsed = propertySchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 400 });
+    if (!parsed.success) return apiError('Validation failed', 400, parsed.error.issues);
+
+    const manager = sanitizeManager(body.manager);
+    if (manager && 'success' in manager && !manager.success) {
+      return apiError('Manager validation failed', 400, manager.error.issues);
     }
+
     const data = parsed.data;
-
-    // Sanitize string inputs
-    const { name, nameAr, address, addressAr, city, cityAr, state, zipCode, description, descriptionAr, image, type, totalUnits, manager } = {
-      ...data,
-      name: sanitizeString(data.name, 200),
-      nameAr: data.nameAr ? sanitizeString(data.nameAr, 200) : null,
-      address: sanitizeString(data.address, 500),
-      addressAr: data.addressAr ? sanitizeString(data.addressAr, 500) : null,
-      city: sanitizeString(data.city, 100),
-      cityAr: data.cityAr ? sanitizeString(data.cityAr, 100) : null,
-      state: data.state ? sanitizeString(data.state, 100) : null,
-      zipCode: data.zipCode ? sanitizeString(data.zipCode, 20) : null,
-      description: data.description ? sanitizeString(data.description, 2000) : null,
-      descriptionAr: data.descriptionAr ? sanitizeString(data.descriptionAr, 2000) : null,
-      image: data.image ? sanitizeString(data.image, 2000) : null,
-      manager: body.manager,
-    };
-
-    const property = await db.property.create({
-      data: {
-        name,
-        nameAr: nameAr || null,
-        address,
-        addressAr: addressAr || null,
-        city,
-        cityAr: cityAr || null,
-        state: state || null,
-        zipCode: zipCode || null,
-        description: description || null,
-        descriptionAr: descriptionAr || null,
-        image: image || null,
-        type: type || 'residential',
-        totalUnits: totalUnits || 0,
-        manager: manager ? {
-          create: {
-            name: sanitizeString(manager.name, 200),
-            nameAr: manager.nameAr ? sanitizeString(manager.nameAr, 200) : null,
-            email: sanitizeString(manager.email, 200),
-            phone: manager.phone ? sanitizeString(manager.phone, 50) : null,
-          },
-        } : undefined,
-      },
-      include: { manager: true },
+    const property = await db.$transaction(async (transaction) => {
+      const created = await transaction.property.create({
+        data: {
+          name: sanitizeString(data.name, 200),
+          nameAr: data.nameAr ? sanitizeString(data.nameAr, 200) : null,
+          address: sanitizeString(data.address, 500),
+          addressAr: data.addressAr ? sanitizeString(data.addressAr, 500) : null,
+          city: sanitizeString(data.city, 100),
+          cityAr: data.cityAr ? sanitizeString(data.cityAr, 100) : null,
+          state: data.state ? sanitizeString(data.state, 100) : null,
+          zipCode: data.zipCode ? sanitizeString(data.zipCode, 20) : null,
+          description: data.description ? sanitizeString(data.description, 2000) : null,
+          descriptionAr: data.descriptionAr ? sanitizeString(data.descriptionAr, 2000) : null,
+          image: data.image ? sanitizeString(data.image, 2000) : null,
+          type: data.type || 'residential',
+          totalUnits: 0,
+          manager: manager && 'data' in manager ? { create: manager.data } : undefined,
+        },
+        include: { manager: true },
+      });
+      await transaction.activityLog.create({
+        data: auditEntry('create', 'property', created.id, { name: created.name }),
+      });
+      return created;
     });
 
     return NextResponse.json(property, { status: 201 });
   } catch (error) {
+    if (isPrismaError(error, 'P2002')) return apiError('A property or manager with this unique value already exists.', 409);
     console.error('Properties POST error:', error);
-    return NextResponse.json({ error: 'Failed to create property' }, { status: 500 });
+    return apiError('Failed to create property', 500);
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    const rateLimitResult = rateLimit();
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-    }
+    const limitResult = requestRateLimit(request, 'properties:write', { maxRequests: 60 });
+    if (!limitResult.success) return apiError('Too many requests', 429);
 
     const body = await request.json();
-
-    const parsed = propertySchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: 'Validation failed', details: parsed.error.issues }, { status: 400 });
-    }
+    const parsed = propertyUpdateSchema.safeParse(body);
+    if (!parsed.success) return apiError('Validation failed', 400, parsed.error.issues);
     const data = parsed.data;
 
-    const { id } = body;
-    if (!id) {
-      return NextResponse.json({ error: 'Property ID is required' }, { status: 400 });
+    const existing = await db.property.findUnique({ where: { id: data.id }, include: { manager: true } });
+    if (!existing) return apiError('Property not found', 404);
+
+    const manager = body.manager === undefined ? undefined : sanitizeManager(body.manager);
+    if (manager && 'success' in manager && !manager.success) {
+      return apiError('Manager validation failed', 400, manager.error.issues);
     }
 
-    // Check if property exists
-    const existing = await db.property.findUnique({ where: { id }, include: { manager: true } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Property not found' }, { status: 404 });
-    }
+    const property = await db.$transaction(async (transaction) => {
+      const updateData: Prisma.PropertyUncheckedUpdateInput = {};
+      if (data.name !== undefined) updateData.name = sanitizeString(data.name, 200);
+      if (data.nameAr !== undefined) updateData.nameAr = data.nameAr ? sanitizeString(data.nameAr, 200) : null;
+      if (data.address !== undefined) updateData.address = sanitizeString(data.address, 500);
+      if (data.addressAr !== undefined) updateData.addressAr = data.addressAr ? sanitizeString(data.addressAr, 500) : null;
+      if (data.city !== undefined) updateData.city = sanitizeString(data.city, 100);
+      if (data.cityAr !== undefined) updateData.cityAr = data.cityAr ? sanitizeString(data.cityAr, 100) : null;
+      if (data.state !== undefined) updateData.state = data.state ? sanitizeString(data.state, 100) : null;
+      if (data.zipCode !== undefined) updateData.zipCode = data.zipCode ? sanitizeString(data.zipCode, 20) : null;
+      if (data.description !== undefined) updateData.description = data.description ? sanitizeString(data.description, 2000) : null;
+      if (data.descriptionAr !== undefined) updateData.descriptionAr = data.descriptionAr ? sanitizeString(data.descriptionAr, 2000) : null;
+      if (data.image !== undefined) updateData.image = data.image ? sanitizeString(data.image, 2000) : null;
+      if (data.type !== undefined) updateData.type = data.type;
 
-    // Sanitize string inputs
-    const sanitizedData = {
-      name: sanitizeString(data.name, 200),
-      nameAr: data.nameAr ? sanitizeString(data.nameAr, 200) : null,
-      address: sanitizeString(data.address, 500),
-      addressAr: data.addressAr ? sanitizeString(data.addressAr, 500) : null,
-      city: sanitizeString(data.city, 100),
-      cityAr: data.cityAr ? sanitizeString(data.cityAr, 100) : null,
-      state: data.state ? sanitizeString(data.state, 100) : null,
-      zipCode: data.zipCode ? sanitizeString(data.zipCode, 20) : null,
-      description: data.description ? sanitizeString(data.description, 2000) : null,
-      descriptionAr: data.descriptionAr ? sanitizeString(data.descriptionAr, 2000) : null,
-      image: data.image ? sanitizeString(data.image, 2000) : null,
-      type: data.type || 'residential',
-      totalUnits: data.totalUnits !== undefined ? data.totalUnits : undefined,
-    };
+      await transaction.property.update({ where: { id: data.id }, data: updateData });
 
-    const property = await db.property.update({
-      where: { id },
-      data: sanitizedData,
-      include: { manager: true },
-    });
-
-    // Handle manager update
-    const manager = body.manager;
-    if (manager !== undefined) {
-      if (existing.manager) {
-        // Update existing manager
-        await db.propertyManager.update({
-          where: { propertyId: id },
-          data: {
-            name: sanitizeString(manager.name, 200),
-            nameAr: manager.nameAr ? sanitizeString(manager.nameAr, 200) : null,
-            email: sanitizeString(manager.email, 200),
-            phone: manager.phone ? sanitizeString(manager.phone, 50) : null,
-          },
-        });
-      } else if (manager) {
-        // Create new manager
-        await db.propertyManager.create({
-          data: {
-            propertyId: id,
-            name: sanitizeString(manager.name, 200),
-            nameAr: manager.nameAr ? sanitizeString(manager.nameAr, 200) : null,
-            email: sanitizeString(manager.email, 200),
-            phone: manager.phone ? sanitizeString(manager.phone, 50) : null,
-          },
+      if (manager === null) {
+        await transaction.propertyManager.deleteMany({ where: { propertyId: data.id } });
+      } else if (manager && 'data' in manager) {
+        await transaction.propertyManager.upsert({
+          where: { propertyId: data.id },
+          create: { propertyId: data.id, ...manager.data },
+          update: manager.data,
         });
       }
-    }
 
-    // Fetch updated property with manager
-    const updatedProperty = await db.property.findUnique({
-      where: { id },
-      include: { manager: true },
+      await transaction.activityLog.create({
+        data: auditEntry('update', 'property', data.id, {
+          fields: Object.keys(data).filter((key) => key !== 'id'),
+          managerChanged: body.manager !== undefined,
+        }),
+      });
+      return transaction.property.findUniqueOrThrow({ where: { id: data.id }, include: { manager: true } });
     });
 
-    return NextResponse.json(updatedProperty);
+    return NextResponse.json(property);
   } catch (error) {
+    if (isPrismaError(error, 'P2002')) return apiError('A property or manager with this unique value already exists.', 409);
     console.error('Properties PUT error:', error);
-    return NextResponse.json({ error: 'Failed to update property' }, { status: 500 });
+    return apiError('Failed to update property', 500);
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const rateLimitResult = rateLimit();
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+    const limitResult = requestRateLimit(request, 'properties:write', { maxRequests: 60 });
+    if (!limitResult.success) return apiError('Too many requests', 429);
+
+    const id = new URL(request.url).searchParams.get('id');
+    if (!id) return apiError('Property ID is required', 400);
+
+    const existing = await db.property.findUnique({
+      where: { id },
+      include: { _count: { select: { units: true, maintenanceRequests: true } } },
+    });
+    if (!existing) return apiError('Property not found', 404);
+    if (existing._count.units > 0 || existing._count.maintenanceRequests > 0) {
+      return apiError('Properties with unit or maintenance history cannot be deleted.', 409);
     }
 
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Property ID is required' }, { status: 400 });
-    }
-
-    // Check if property exists
-    const existing = await db.property.findUnique({ where: { id } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Property not found' }, { status: 404 });
-    }
-
-    // Delete property (cascades to manager, units, maintenance requests)
-    await db.property.delete({ where: { id } });
-
+    await db.$transaction(async (transaction) => {
+      await transaction.property.delete({ where: { id } });
+      await transaction.activityLog.create({
+        data: auditEntry('delete', 'property', id, { name: existing.name }),
+      });
+    });
     return NextResponse.json({ message: 'Property deleted successfully' });
   } catch (error) {
     console.error('Properties DELETE error:', error);
-    return NextResponse.json({ error: 'Failed to delete property' }, { status: 500 });
+    return apiError('Failed to delete property', 500);
   }
 }

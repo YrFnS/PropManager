@@ -1,110 +1,94 @@
 import { db } from '@/lib/db';
-import { NextResponse } from 'next/server';
-import { rateLimit } from '@/lib/validation';
+import { NextRequest, NextResponse } from 'next/server';
+import { apiError, requestRateLimit } from '@/lib/api';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const rateLimitResult = rateLimit();
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
-    }
+    const limitResult = requestRateLimit(request, 'notifications:read', { maxRequests: 180 });
+    if (!limitResult.success) return apiError('Too many requests', 429);
 
-    // Fetch unread messages (last 5)
-    const unreadMessages = await db.message.findMany({
-      where: { isRead: false },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    });
+    const localeCookie = request.cookies.get('NEXT_LOCALE')?.value;
+    const localeHeader = request.headers.get('accept-language') || '';
+    const isArabic = localeCookie === 'ar' || (!localeCookie && localeHeader.toLowerCase().startsWith('ar'));
 
-    // Fetch late payments (last 5)
-    const latePayments = await db.payment.findMany({
-      where: { status: 'late' },
-      include: {
-        tenant: { select: { id: true, name: true, nameAr: true } },
-      },
-      orderBy: { dueDate: 'desc' },
-      take: 5,
-    });
+    const [unreadMessages, latePayments, openMaintenance, unreadMessageCount] = await Promise.all([
+      db.message.findMany({ where: { isRead: false }, orderBy: { createdAt: 'desc' }, take: 5 }),
+      db.payment.findMany({
+        where: { status: 'late' },
+        include: { tenant: { select: { id: true, name: true, nameAr: true } } },
+        orderBy: { dueDate: 'desc' },
+        take: 5,
+      }),
+      db.maintenanceRequest.findMany({
+        where: { status: 'open' },
+        include: {
+          property: { select: { id: true, name: true, nameAr: true } },
+          unit: { select: { id: true, unitNumber: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+      db.message.count({ where: { isRead: false } }),
+    ]);
 
-    // Fetch open maintenance requests (last 5)
-    const openMaintenance = await db.maintenanceRequest.findMany({
-      where: { status: 'open' },
-      include: {
-        property: { select: { id: true, name: true, nameAr: true } },
-        unit: { select: { id: true, unitNumber: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    });
-
-    // Count totals for unread count
-    const unreadMessageCount = await db.message.count({ where: { isRead: false } });
-    const latePaymentCount = await db.payment.count({ where: { status: 'late' } });
-    const openMaintenanceCount = await db.maintenanceRequest.count({ where: { status: 'open' } });
-
-    // Build notifications array with type and data instead of hardcoded titles
     const notifications: Array<{
       id: string;
       type: 'message' | 'payment' | 'maintenance';
-      data: Record<string, string | number>;
       title: string;
       description: string;
       createdAt: string;
       section: string;
     }> = [];
 
-    for (const msg of unreadMessages) {
+    for (const message of unreadMessages) {
       notifications.push({
-        id: `msg_${msg.id}`,
+        id: `msg_${message.id}`,
         type: 'message',
-        data: { senderName: msg.senderName, subject: msg.subject },
-        title: `New message from ${msg.senderName}`,
-        description: msg.subject,
-        createdAt: msg.createdAt.toISOString(),
+        title: isArabic ? `رسالة جديدة من ${message.senderName}` : `New message from ${message.senderName}`,
+        description: message.subject,
+        createdAt: message.createdAt.toISOString(),
         section: 'messages',
       });
     }
 
-    for (const pay of latePayments) {
-      const tenantName = pay.tenant?.name || 'Unknown';
+    for (const payment of latePayments) {
+      const tenantName = isArabic && payment.tenant?.nameAr ? payment.tenant.nameAr : payment.tenant?.name || (isArabic ? 'غير معروف' : 'Unknown');
       notifications.push({
-        id: `pay_${pay.id}`,
+        id: `pay_${payment.id}`,
         type: 'payment',
-        data: { tenantName, amount: pay.amount },
-        title: 'Late payment',
-        description: `$${pay.amount.toLocaleString()} from ${tenantName}`,
-        createdAt: pay.dueDate.toISOString(),
+        title: isArabic ? 'دفعة متأخرة' : 'Late payment',
+        description: isArabic
+          ? `${payment.amount.toLocaleString('ar-IQ')} من ${tenantName}`
+          : `$${payment.amount.toLocaleString('en-US')} from ${tenantName}`,
+        createdAt: payment.dueDate.toISOString(),
         section: 'payments',
       });
     }
 
-    for (const req of openMaintenance) {
-      const unitInfo = req.unit ? `Unit ${req.unit.unitNumber}` : 'No unit';
+    for (const maintenance of openMaintenance) {
+      const propertyName = isArabic && maintenance.property.nameAr ? maintenance.property.nameAr : maintenance.property.name;
+      const unitInfo = maintenance.unit
+        ? `${isArabic ? 'الوحدة' : 'Unit'} ${maintenance.unit.unitNumber}`
+        : propertyName;
       notifications.push({
-        id: `maint_${req.id}`,
+        id: `maint_${maintenance.id}`,
         type: 'maintenance',
-        data: { title: req.title, unitInfo },
-        title: 'Open maintenance request',
-        description: `${req.title} - ${unitInfo}`,
-        createdAt: req.createdAt.toISOString(),
+        title: isArabic ? 'طلب صيانة مفتوح' : 'Open maintenance request',
+        description: `${isArabic && maintenance.titleAr ? maintenance.titleAr : maintenance.title} · ${unitInfo}`,
+        createdAt: maintenance.createdAt.toISOString(),
         section: 'maintenance',
       });
     }
 
-    // Sort by createdAt descending and limit to 5
-    notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    const limitedNotifications = notifications.slice(0, 5);
-
-    const unreadCount = unreadMessageCount + latePaymentCount + openMaintenanceCount;
-
+    notifications.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
     const response = NextResponse.json({
-      notifications: limitedNotifications,
-      unreadCount,
+      notifications: notifications.slice(0, 8),
+      unreadCount: unreadMessageCount,
     });
-    response.headers.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10');
+    response.headers.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=20');
     return response;
   } catch (error) {
     console.error('Notifications API error:', error);
-    return NextResponse.json({ error: 'Failed to fetch notifications' }, { status: 500 });
+    return apiError('Failed to fetch notifications', 500);
   }
 }
