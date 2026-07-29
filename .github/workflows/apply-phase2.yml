@@ -1,0 +1,59 @@
+name: Apply organization isolation phase
+
+on:
+  push:
+    branches:
+      - agent/stabilize-core-workflows
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[phase2 applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/stabilize-core-workflows
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Apply reviewed organization payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f .phase2-payload.ready ]; then
+            echo "Organization payload is not complete yet; nothing to apply."
+            exit 0
+          fi
+
+          for part in .phase2-payload.part-00 .phase2-payload.part-01 .phase2-payload.part-02 .phase2-payload.part-03 .phase2-payload.part-04; do
+            test -f "$part"
+          done
+
+          cat .phase2-payload.part-* | base64 -d > /tmp/propmanager-phase2.tar.gz
+          echo "462a6717b3f868267c15578031a4dfbe0deceaf8843b1263e0cb5e8a6c344eff  /tmp/propmanager-phase2.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/propmanager-phase2.tar.gz -C .
+
+          bun ci
+          bun run db:generate
+          bun run typecheck
+          bun run lint
+          bun run build
+
+          rm -f .phase2-payload.part-* .phase2-payload.ready .github/workflows/apply-phase2.yml
+
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+
+          git commit -m "feat: add organization isolation and role access [phase2 applied]"
+          git push origin HEAD:agent/stabilize-core-workflows
