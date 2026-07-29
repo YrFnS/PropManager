@@ -5,9 +5,6 @@ on:
   push:
     branches: [main]
 
-permissions:
-  contents: write
-
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -19,40 +16,11 @@ jobs:
       ENABLE_AI_COPILOT: "false"
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: agent/stabilize-core-workflows
-          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - name: Apply record navigation and quick-action fixes
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/apply-navigation-phase.py
-          rm scripts/apply-navigation-phase.py
-          touch /tmp/navigation-phase-applied
-          git diff --check
       - run: bun ci
       - run: bun run db:generate
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run build
-      - name: Publish validated navigation phase
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ ! -f /tmp/navigation-phase-applied ]; then
-            exit 0
-          fi
-          if [ "${{ job.status }}" != "success" ]; then
-            echo "Validation failed; refusing to publish."
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "fix: open exact records and wire quick actions [navigation applied]"
-          git push origin HEAD:agent/stabilize-core-workflows
