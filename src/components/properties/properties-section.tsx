@@ -28,6 +28,7 @@ import PropertyImage from '@/components/properties/property-image';
 import { Building2, Plus, Search, MapPin, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useEffect, useState } from 'react';
+import { useRouteIntent } from '@/lib/route-intent';
 
 export default function PropertiesSection() {
   const t = useTranslations('properties');
@@ -37,7 +38,7 @@ export default function PropertiesSection() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
@@ -49,7 +50,7 @@ export default function PropertiesSection() {
   const fetchData = () => {
     const params = new URLSearchParams();
     if (search) params.set('search', search);
-    if (typeFilter) params.set('type', typeFilter);
+    if (typeFilter !== 'all') params.set('type', typeFilter);
     fetch(`/api/properties?${params}`).then(r => r.json()).then(d => { setData(d.data || d); setLoading(false); });
   };
 
@@ -58,7 +59,7 @@ export default function PropertiesSection() {
     const load = async () => {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
-      if (typeFilter) params.set('type', typeFilter);
+      if (typeFilter !== 'all') params.set('type', typeFilter);
       try {
         const r = await fetch(`/api/properties?${params}`);
         const d = await r.json();
@@ -164,6 +165,12 @@ export default function PropertiesSection() {
   };
 
   const updateForm = (key: string, value: any) => setForm((p: any) => ({ ...p, [key]: value }));
+
+  useRouteIntent({
+    section: 'properties',
+    onAdd: openAddDialog,
+    onRecord: openDetailSheet,
+  });
 
   if (loading) return <div className="grid gap-4 md:grid-cols-3">{[1,2,3].map(i => <Card key={i} className="animate-pulse"><CardContent className="p-6"><div className="h-32 bg-muted rounded" /></CardContent></Card>)}</div>;
 

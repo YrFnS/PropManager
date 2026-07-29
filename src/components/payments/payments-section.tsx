@@ -30,6 +30,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DEFAULT_STATUS_COLOR, STATUS_COLORS } from '@/lib/status-config';
+import { useRouteIntent } from '@/lib/route-intent';
 
 interface Payment {
   id: string;
@@ -213,6 +214,22 @@ export default function PaymentsSection() {
     });
     setDialogOpen(true);
   };
+
+  const openPaymentRecord = async (paymentId: string) => {
+    try {
+      const response = await fetch(`/api/payments?id=${encodeURIComponent(paymentId)}&limit=1`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(await readResponseError(response, tc('error')));
+      const payload = await response.json();
+      const payment = Array.isArray(payload.data) ? payload.data[0] : null;
+      if (!payment) throw new Error(isAr ? 'لم يتم العثور على الدفعة.' : 'Payment not found.');
+      setSelectedPayment(payment);
+      setReceiptOpen(true);
+    } catch (recordError) {
+      toast.error(recordError instanceof Error ? recordError.message : tc('error'));
+    }
+  };
+
+  useRouteIntent({ section: 'payments', onAdd: openAdd, onRecord: openPaymentRecord });
 
   const handleSubmit = async () => {
     const amount = Number.parseFloat(form.amount);

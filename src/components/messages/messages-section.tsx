@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -18,6 +18,7 @@ import EmptyState from '@/components/ui/empty-state';
 import { toast } from 'sonner';
 import { CATEGORY_COLORS, DEFAULT_STATUS_COLOR } from '@/lib/status-config';
 import { useEffect, useState, useCallback } from 'react';
+import { useRouteIntent } from '@/lib/route-intent';
 
 interface Message {
   id: string;
@@ -33,6 +34,11 @@ interface Message {
 const emptyForm = {
   senderName: '', senderEmail: '', subject: '', content: '', category: 'general',
 };
+
+async function messageResponseError(response: Response, fallback: string) {
+  const payload = await response.json().catch(() => null);
+  return typeof payload?.error === 'string' ? payload.error : fallback;
+}
 
 export default function MessagesSection() {
   const t = useTranslations('messages');
@@ -98,6 +104,22 @@ export default function MessagesSection() {
     setDialogOpen(true);
   };
 
+  const openMessageRecord = async (messageId: string) => {
+    try {
+      const response = await fetch(`/api/messages?id=${encodeURIComponent(messageId)}&limit=1`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(await messageResponseError(response, tc('error')));
+      const payload = await response.json();
+      const message = Array.isArray(payload.data) ? payload.data[0] : null;
+      if (!message) throw new Error(isAr ? 'لم يتم العثور على الرسالة.' : 'Message not found.');
+      setMessages([message]);
+      setExpandedId(message.id);
+    } catch (recordError) {
+      toast.error(recordError instanceof Error ? recordError.message : tc('error'));
+    }
+  };
+
+  useRouteIntent({ section: 'messages', onAdd: handleOpenAdd, onRecord: openMessageRecord });
+
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
@@ -130,11 +152,12 @@ export default function MessagesSection() {
   const toggleRead = async (msg: Message) => {
     const newRead = !msg.isRead;
     try {
-      await fetch('/api/messages', {
+      const response = await fetch('/api/messages', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: msg.id, isRead: newRead }),
       });
+      if (!response.ok) throw new Error(await messageResponseError(response, tc('error')));
       fetchMessages();
       toast.success(newRead ? t('markAsRead') : t('markAsUnread'));
     } catch {
@@ -144,11 +167,12 @@ export default function MessagesSection() {
 
   const handleMarkAllRead = async () => {
     try {
-      await fetch('/api/messages', {
+      const response = await fetch('/api/messages', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ markAllRead: true }),
       });
+      if (!response.ok) throw new Error(await messageResponseError(response, tc('error')));
       fetchMessages();
       toast.success(t('markAllRead'));
     } catch {
@@ -190,17 +214,15 @@ export default function MessagesSection() {
             <Badge variant="destructive">{unreadCount} {t('unreadMessages')}</Badge>
           )}
         </div>
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <Button variant="outline" onClick={handleMarkAllRead}>
+              <CheckCheck className="h-4 w-4 me-2" />{t('markAllRead')}
+            </Button>
+          )}
+          <Button onClick={handleOpenAdd}><Plus className="h-4 w-4 me-2" />{t('newMessage')}</Button>
+        </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <div className="flex items-center gap-2">
-              {unreadCount > 0 && (
-                <Button variant="outline" onClick={handleMarkAllRead}>
-                  <CheckCheck className="h-4 w-4 me-2" />{t('markAllRead')}
-                </Button>
-              )}
-              <Button onClick={handleOpenAdd}><Plus className="h-4 w-4 me-2" />{t('newMessage')}</Button>
-            </div>
-          </DialogTrigger>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{t('newMessage')}</DialogTitle>

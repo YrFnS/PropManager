@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
     if (!limitResult.success) return apiError('Too many requests', 429);
 
     const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id') || '';
     const status = searchParams.get('status') || '';
     const priority = searchParams.get('priority') || '';
     const category = searchParams.get('category') || '';
@@ -50,6 +51,7 @@ export async function GET(request: NextRequest) {
     const { page, limit, skip } = getPagination(searchParams);
 
     const where: Prisma.MaintenanceRequestWhereInput = {};
+    if (id) where.id = id;
     if (status && status !== 'all') where.status = status;
     if (priority && priority !== 'all') where.priority = priority;
     if (category && category !== 'all') where.category = category;

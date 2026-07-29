@@ -30,6 +30,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ar as arLocale } from 'date-fns/locale/ar';
 import AnimatedCounter from '@/components/ui/animated-counter';
 import HealthScoreCard from '@/components/dashboard/health-score-card';
+import { setRouteIntent } from '@/lib/route-intent';
 
 interface PropertyRevenueItem {
   name: string;
@@ -196,10 +197,10 @@ export default function DashboardSection() {
   ];
 
   const quickActions = [
-    { label: t('addProperty'), icon: Building2, section: 'properties' as const },
-    { label: t('addTenant'), icon: Users, section: 'tenants' as const },
-    { label: t('recordPayment'), icon: DollarSign, section: 'payments' as const },
-    { label: t('newMaintenance'), icon: Wrench, section: 'maintenance' as const },
+    { label: t('addProperty'), icon: Building2, section: 'properties' as const, action: 'add' as const },
+    { label: t('addTenant'), icon: Users, section: 'tenants' as const, action: 'add' as const },
+    { label: t('recordPayment'), icon: DollarSign, section: 'payments' as const, action: 'add' as const },
+    { label: t('newMaintenance'), icon: Wrench, section: 'maintenance' as const, action: 'add' as const },
     { label: t('viewMessages'), icon: MessageSquare, section: 'messages' as const },
   ];
 
@@ -238,7 +239,10 @@ export default function DashboardSection() {
             variant="ghost"
             size="sm"
             className="h-8 text-xs gap-1.5 shrink-0 text-muted-foreground hover:text-foreground"
-            onClick={() => router.push(action.section)}
+            onClick={() => {
+              if (action.action === 'add') setRouteIntent({ section: action.section, action: 'add' });
+              router.push(action.section);
+            }}
           >
             <action.icon className="h-3.5 w-3.5" />
             {action.label}

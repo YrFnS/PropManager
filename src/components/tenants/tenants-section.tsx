@@ -27,6 +27,7 @@ import TenantDetailSheet from './tenant-detail-sheet';
 import { STATUS_COLORS, DEFAULT_STATUS_COLOR } from '@/lib/status-config';
 import { toast } from 'sonner';
 import { useEffect, useState, useCallback } from 'react';
+import { useRouteIntent } from '@/lib/route-intent';
 
 interface Tenant {
   id: string;
@@ -196,6 +197,15 @@ export default function TenantsSection() {
   const getStatusLabel = (status: string) => {
     return status === 'active' ? t('active') : t('inactive');
   };
+
+  useRouteIntent({
+    section: 'tenants',
+    onAdd: openAddDialog,
+    onRecord: (tenantId) => {
+      setSelectedTenantId(tenantId);
+      setDetailSheetOpen(true);
+    },
+  });
 
   const exportCsv = () => {
     const headers = ['Name', 'Email', 'Phone', 'National ID', 'Status'];

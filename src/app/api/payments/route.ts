@@ -33,10 +33,12 @@ export async function GET(request: NextRequest) {
     if (!limitResult.success) return apiError('Too many requests', 429);
 
     const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id') || '';
     const status = searchParams.get('status') || '';
     const method = searchParams.get('method') || '';
     const { page, limit, skip } = getPagination(searchParams);
     const where: Prisma.PaymentWhereInput = {};
+    if (id) where.id = id;
     if (status && status !== 'all') where.status = status;
     if (method && method !== 'all') where.method = method;
 

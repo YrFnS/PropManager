@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
+import { setRouteIntent } from '@/lib/route-intent';
 import {
   CommandDialog,
   CommandInput,
@@ -168,12 +169,13 @@ export function CommandPalette() {
   };
 
   const handleActionSelect = (action: ActionItem) => {
+    setRouteIntent({ section: action.section, action: 'add' });
     router.push(action.section);
     setCommandPaletteOpen(false);
-    window.dispatchEvent(new CustomEvent('command-palette-action', { detail: { action: action.key } }));
   };
 
   const handleSearchResultSelect = (item: SearchResultItem) => {
+    setRouteIntent({ section: item.section, recordId: item.id });
     router.push(item.section as Section);
     setCommandPaletteOpen(false);
   };

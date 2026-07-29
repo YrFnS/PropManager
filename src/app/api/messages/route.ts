@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id') || '';
     const category = searchParams.get('category') || '';
     const isRead = searchParams.get('isRead');
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
@@ -17,7 +18,8 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     const where: any = {};
-    if (category) where.category = category;
+    if (id) where.id = id;
+    if (category && category !== 'all') where.category = category;
     if (isRead !== null && isRead !== '') where.isRead = isRead === 'true';
 
     const [messages, total] = await Promise.all([

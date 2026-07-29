@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DEFAULT_STATUS_COLOR, STATUS_COLORS } from '@/lib/status-config';
+import { useRouteIntent } from '@/lib/route-intent';
 
 interface Lease {
   id: string;
@@ -192,6 +193,21 @@ export default function LeasesSection() {
     });
     setDialogOpen(true);
   };
+
+  const openLeaseRecord = async (leaseId: string) => {
+    try {
+      const response = await fetch(`/api/leases?id=${encodeURIComponent(leaseId)}&limit=1`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(await responseError(response, tc('error')));
+      const payload = await response.json();
+      const lease = Array.isArray(payload.data) ? payload.data[0] : null;
+      if (!lease) throw new Error(isAr ? 'لم يتم العثور على عقد الإيجار.' : 'Lease not found.');
+      openEdit(lease);
+    } catch (recordError) {
+      toast.error(recordError instanceof Error ? recordError.message : tc('error'));
+    }
+  };
+
+  useRouteIntent({ section: 'leases', onAdd: openAdd, onRecord: openLeaseRecord });
 
   const handleSubmit = async () => {
     const rentAmount = Number.parseFloat(form.rentAmount);

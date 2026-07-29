@@ -30,6 +30,7 @@ import { STATUS_COLORS, DEFAULT_STATUS_COLOR } from '@/lib/status-config';
 import { toast } from 'sonner';
 import { useEffect, useState, useCallback } from 'react';
 import UnitDetailSheet from './unit-detail-sheet';
+import { setRouteIntent, useRouteIntent } from '@/lib/route-intent';
 
 interface Unit {
   id: string;
@@ -156,7 +157,8 @@ export default function UnitsSection() {
     setDetailSheetOpen(true);
   };
 
-  const handleViewTenant = (_tenantId: string) => {
+  const handleViewTenant = (tenantId: string) => {
+    setRouteIntent({ section: 'tenants', recordId: tenantId });
     router.push('tenants');
   };
 
@@ -321,6 +323,15 @@ export default function UnitsSection() {
 
   const getStatusBadge = (status: string) => STATUS_COLORS[status] || DEFAULT_STATUS_COLOR;
 
+  useRouteIntent({
+    section: 'units',
+    onAdd: openAddDialog,
+    onRecord: (unitId) => {
+      setSelectedUnitId(unitId);
+      setDetailSheetOpen(true);
+    },
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -470,7 +481,7 @@ export default function UnitsSection() {
                 {[1, 2, 3, 4, 5].map(row => (
                   <TableRow key={row}>
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(cell => (
-                      <TableCell key={cell}><Skeleton className={`h-4 w-${cell === 1 ? 20 : cell === 7 ? 16 : 14}`} /></TableCell>
+                      <TableCell key={cell}><Skeleton className={cell === 1 ? 'h-4 w-20' : cell === 7 ? 'h-4 w-16' : 'h-4 w-14'} /></TableCell>
                     ))}
                   </TableRow>
                 ))}
@@ -491,7 +502,13 @@ export default function UnitsSection() {
           {units.map(u => (
             <Card
               key={u.id}
-              className="group hover:shadow-lg hover:scale-[1.01] transition-all duration-200"
+              role="button"
+              tabIndex={0}
+              className="group cursor-pointer hover:shadow-lg hover:scale-[1.01] transition-all duration-200"
+              onClick={() => handleUnitClick(u)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') handleUnitClick(u);
+              }}
             >
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center justify-between">

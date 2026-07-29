@@ -23,6 +23,7 @@ import MaintenanceKanban from '@/components/maintenance/maintenance-kanban';
 import { STATUS_COLORS, DEFAULT_STATUS_COLOR, PRIORITY_COLORS } from '@/lib/status-config';
 import { toast } from 'sonner';
 import { useEffect, useState, useCallback } from 'react';
+import { useRouteIntent } from '@/lib/route-intent';
 
 interface MaintenanceRequest {
   id: string;
@@ -165,7 +166,26 @@ export default function MaintenanceSection() {
     setDialogOpen(true);
   };
 
+  const openMaintenanceRecord = async (requestId: string) => {
+    try {
+      const response = await fetch(`/api/maintenance?id=${encodeURIComponent(requestId)}&limit=1`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(tc('error'));
+      const payload = await response.json();
+      const maintenanceRequest = Array.isArray(payload.data) ? payload.data[0] : null;
+      if (!maintenanceRequest) throw new Error(isAr ? 'لم يتم العثور على طلب الصيانة.' : 'Maintenance request not found.');
+      handleOpenEdit(maintenanceRequest);
+    } catch (recordError) {
+      toast.error(recordError instanceof Error ? recordError.message : tc('error'));
+    }
+  };
+
+  useRouteIntent({ section: 'maintenance', onAdd: handleOpenAdd, onRecord: openMaintenanceRecord });
+
   const handleSubmit = async () => {
+    if (!form.description.trim()) {
+      toast.error(isAr ? 'وصف طلب الصيانة مطلوب.' : 'A maintenance description is required.');
+      return;
+    }
     setSubmitting(true);
     try {
       const payload = {

@@ -39,9 +39,12 @@ export async function GET(request: NextRequest) {
     if (!limitResult.success) return apiError('Too many requests', 429);
 
     const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id') || '';
     const status = searchParams.get('status') || '';
     const { page, limit, skip } = getPagination(searchParams);
-    const where: Prisma.LeaseWhereInput = status && status !== 'all' ? { status } : {};
+    const where: Prisma.LeaseWhereInput = {};
+    if (id) where.id = id;
+    if (status && status !== 'all') where.status = status;
     const now = new Date();
     const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
