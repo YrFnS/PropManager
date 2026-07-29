@@ -34,15 +34,15 @@ jobs:
             exit 0
           fi
 
-          for part in .phase2-payload.part-00 .phase2-payload.part-01 .phase2-payload.part-02 .phase2-payload.part-03 .phase2-payload.part-04; do
+          for part in .phase2-payload.part-00 .phase2-payload.part-01 .phase2-payload.part-02 .phase2-payload.fixed-{00..10}; do
             test -f "$part"
           done
 
-          cat .phase2-payload.part-* | base64 -d > /tmp/propmanager-phase2.tar.gz
-          sha256sum /tmp/propmanager-phase2.tar.gz
+          cat .phase2-payload.part-00 .phase2-payload.part-01 .phase2-payload.part-02 .phase2-payload.fixed-{00..10} | base64 -d > /tmp/propmanager-phase2.tar.gz
+          echo "b42c5980bd91554fe204f1c1f654e69e55e3284a262d8669d74b55faea2e4e67  /tmp/propmanager-phase2.tar.gz" | sha256sum -c -
           tar -tzf /tmp/propmanager-phase2.tar.gz >/dev/null
           tar -xzf /tmp/propmanager-phase2.tar.gz -C .
-          rm -f .phase2-payload.part-* .phase2-payload.ready .github/workflows/apply-phase2.yml
+          rm -f .phase2-payload.* .github/workflows/apply-phase2.yml
 
           cat > .github/workflows/ci.yml <<'YAML'
           name: CI
