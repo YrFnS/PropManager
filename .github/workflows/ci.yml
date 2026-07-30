@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -32,41 +36,6 @@ jobs:
           python3 scripts/prepare-organization-formatting-transformer.py
           python3 scripts/apply-organization-formatting.py
           rm scripts/prepare-organization-formatting-transformer.py scripts/apply-organization-formatting.py
-          cat > .github/workflows/ci.yml <<'YAML'
-          name: CI
-
-          on:
-            pull_request:
-            push:
-              branches: [main]
-
-          permissions:
-            contents: read
-
-          concurrency:
-            group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-            cancel-in-progress: true
-
-          jobs:
-            validate:
-              runs-on: ubuntu-latest
-              env:
-                DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propmanager?schema=public
-                AUTH_SECRET: ci-only-auth-secret-with-more-than-thirty-two-characters
-                ADMIN_EMAIL: ci@example.com
-                ADMIN_PASSWORD: ci-only-password
-                ENABLE_AI_COPILOT: "false"
-              steps:
-                - uses: actions/checkout@v4
-                - uses: oven-sh/setup-bun@v2
-                  with:
-                    bun-version: latest
-                - run: bun ci
-                - run: bun run db:generate
-                - run: bun run typecheck
-                - run: bun run lint
-                - run: bun run build
-          YAML
           touch /tmp/formatting-phase-applied
           git diff --check
       - run: bun ci
