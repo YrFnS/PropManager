@@ -1,0 +1,344 @@
+name: Bootstrap browser and migration rehearsal
+
+on:
+  push:
+    branches:
+      - agent/stabilize-core-workflows
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bootstrap-browser-rehearsal
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    if: ${{ contains(github.event.head_commit.message, '[setup rehearsal]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: propmanager
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d propmanager"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propmanager?schema=public
+      LEGACY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propmanager_legacy?schema=public
+      LEGACY_PSQL_URL: postgresql://postgres:postgres@localhost:5432/propmanager_legacy
+      AUTH_SECRET: rehearsal-auth-secret-with-more-than-thirty-two-characters
+      ADMIN_EMAIL: owner@example.com
+      ADMIN_PASSWORD: OwnerPassword123!
+      ADMIN_NAME: Rehearsal Owner
+      DEFAULT_ORGANIZATION_NAME: Rehearsal Properties
+      DEFAULT_CURRENCY: USD
+      DEFAULT_TIMEZONE: UTC
+      ENABLE_AI_COPILOT: "false"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/stabilize-core-workflows
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Add Playwright and rehearsal files
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun add --dev @playwright/test@latest
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('package.json')
+          package = json.loads(path.read_text())
+          scripts = package.setdefault('scripts', {})
+          scripts['test'] = 'bun test tests'
+          scripts['test:e2e'] = 'playwright test'
+          scripts['test:e2e:report'] = 'playwright show-report'
+          path.write_text(json.dumps(package, indent=2) + '\n')
+          PY
+
+          cat > playwright.config.ts <<'TS'
+          import { defineConfig } from '@playwright/test';
+
+          export default defineConfig({
+            testDir: './e2e',
+            testMatch: '**/*.pw.ts',
+            fullyParallel: false,
+            forbidOnly: Boolean(process.env.CI),
+            retries: process.env.CI ? 1 : 0,
+            workers: process.env.CI ? 1 : undefined,
+            timeout: 45_000,
+            expect: { timeout: 12_000 },
+            reporter: process.env.CI
+              ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
+              : [['list']],
+            use: {
+              baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
+              trace: 'retain-on-failure',
+              screenshot: 'only-on-failure',
+              video: 'retain-on-failure',
+            },
+            projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+            webServer: {
+              command: 'bun run dev',
+              url: 'http://localhost:3000/en/login',
+              reuseExistingServer: !process.env.CI,
+              timeout: 180_000,
+              stdout: 'pipe',
+              stderr: 'pipe',
+            },
+          });
+          TS
+
+          mkdir -p e2e
+          cat > e2e/auth-and-permissions.pw.ts <<'TS'
+          import { expect, test, type Page } from '@playwright/test';
+
+          const ownerEmail = process.env.ADMIN_EMAIL || 'owner@example.com';
+          const ownerPassword = process.env.ADMIN_PASSWORD || 'OwnerPassword123!';
+          const viewerEmail = 'viewer@example.com';
+          const viewerPassword = 'ViewerPassword123!';
+
+          async function login(page: Page, email: string, password: string) {
+            await page.goto('/en/login');
+            await page.getByLabel('Email').fill(email);
+            await page.getByLabel('Password').fill(password);
+            await Promise.all([
+              page.waitForURL(/\/en\/dashboard/),
+              page.getByRole('button', { name: 'Sign in' }).click(),
+            ]);
+          }
+
+          test('unauthenticated routes redirect to the localized login page', async ({ page }) => {
+            await page.goto('/en/dashboard');
+            await expect(page).toHaveURL(/\/en\/login\?next=(%2F|\/)dashboard/);
+            await expect(page.getByLabel('Email')).toBeVisible();
+          });
+
+          test('Arabic login keeps the document in RTL mode', async ({ page }) => {
+            await page.goto('/ar/login');
+            await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+          });
+
+          test('bootstrap owner can work while a viewer stays read-only', async ({ browser }) => {
+            const ownerContext = await browser.newContext();
+            const ownerPage = await ownerContext.newPage();
+            await login(ownerPage, ownerEmail, ownerPassword);
+
+            const ownerSession = await ownerContext.request.get('/api/auth/session');
+            expect(ownerSession.status()).toBe(200);
+            expect((await ownerSession.json()).session.role).toBe('owner');
+
+            await ownerPage.goto('/en/properties');
+            const ownerControls = ownerPage.locator('[data-pm-write-resource="properties"]');
+            expect(await ownerControls.count()).toBeGreaterThan(0);
+            await expect(ownerControls.first()).toBeVisible();
+
+            const createViewer = await ownerContext.request.post('/api/settings/users', {
+              data: {
+                name: 'Read Only User',
+                email: viewerEmail,
+                password: viewerPassword,
+                role: 'viewer',
+              },
+            });
+            expect(createViewer.status()).toBe(201);
+            await ownerContext.close();
+
+            const viewerContext = await browser.newContext();
+            const viewerPage = await viewerContext.newPage();
+            await login(viewerPage, viewerEmail, viewerPassword);
+            await viewerPage.goto('/en/properties');
+
+            const viewerControls = viewerPage.locator('[data-pm-write-resource="properties"]');
+            expect(await viewerControls.count()).toBeGreaterThan(0);
+            await expect(viewerControls.first()).toBeHidden();
+
+            const deniedMutation = await viewerContext.request.post('/api/properties', {
+              data: {
+                name: 'Denied Property',
+                address: '1 Test Street',
+                city: 'Test City',
+                type: 'residential',
+              },
+            });
+            expect(deniedMutation.status()).toBe(403);
+            await viewerContext.close();
+          });
+          TS
+
+          mkdir -p scripts
+          cat > scripts/rehearse-migrations.sh <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          : "${DATABASE_URL:?DATABASE_URL is required}"
+          : "${LEGACY_DATABASE_URL:?LEGACY_DATABASE_URL is required}"
+          : "${LEGACY_PSQL_URL:?LEGACY_PSQL_URL is required}"
+
+          bun run db:migrate:deploy
+          bunx prisma migrate status
+
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+
+          PGPASSWORD=postgres dropdb --if-exists -h localhost -U postgres propmanager_legacy
+          PGPASSWORD=postgres createdb -h localhost -U postgres propmanager_legacy
+          psql "${LEGACY_PSQL_URL}" -v ON_ERROR_STOP=1 \
+            -f prisma/migrations/20260729_stabilize_relations/migration.sql
+
+          DATABASE_URL="${LEGACY_DATABASE_URL}" bunx prisma migrate resolve \
+            --applied 20260729_stabilize_relations
+
+          psql "${LEGACY_PSQL_URL}" -v ON_ERROR_STOP=1 <<'SQL'
+          INSERT INTO "Property" ("id", "name", "address", "city", "type", "totalUnits", "createdAt", "updatedAt")
+          VALUES ('legacy_property', 'Legacy Tower', '1 Legacy Road', 'Baghdad', 'residential', 99, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+          INSERT INTO "Tenant" ("id", "name", "email", "status", "createdAt", "updatedAt") VALUES
+            ('legacy_tenant', 'Legacy Tenant', 'legacy@example.com', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+            ('wrong_tenant', 'Wrong Tenant', 'wrong@example.com', 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+          INSERT INTO "Unit" ("id", "propertyId", "unitNumber", "rooms", "bathrooms", "rentAmount", "status", "createdAt", "updatedAt")
+          VALUES ('legacy_unit', 'legacy_property', 'A-1', 2, 1, 1000.126, 'rented', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+          INSERT INTO "Lease" ("id", "unitId", "tenantId", "startDate", "endDate", "rentAmount", "deposit", "status", "createdAt", "updatedAt")
+          VALUES ('legacy_lease', 'legacy_unit', 'legacy_tenant', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 year', 1000.126, 2000.126, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+          INSERT INTO "Payment" ("id", "leaseId", "tenantId", "amount", "dueDate", "paidDate", "status", "method", "createdAt", "updatedAt")
+          VALUES ('legacy_payment', 'legacy_lease', 'wrong_tenant', 1000.126, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'paid', 'cash', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+          SQL
+
+          DATABASE_URL="${LEGACY_DATABASE_URL}" bun run db:migrate:deploy
+          DATABASE_URL="${LEGACY_DATABASE_URL}" bunx prisma migrate status
+
+          psql "${LEGACY_PSQL_URL}" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF (SELECT "organizationId" FROM "Property" WHERE "id" = 'legacy_property') <> 'org_default' THEN
+              RAISE EXCEPTION 'Legacy property was not assigned to the default organization';
+            END IF;
+            IF (SELECT "tenantId" FROM "Payment" WHERE "id" = 'legacy_payment') <> 'legacy_tenant' THEN
+              RAISE EXCEPTION 'Legacy payment tenant was not repaired from its lease';
+            END IF;
+            IF (SELECT "amount" FROM "Payment" WHERE "id" = 'legacy_payment') <> 1000.13::numeric THEN
+              RAISE EXCEPTION 'Legacy payment amount was not rounded to fixed precision';
+            END IF;
+            IF (SELECT "rentAmount" FROM "Unit" WHERE "id" = 'legacy_unit') <> 1000.13::numeric THEN
+              RAISE EXCEPTION 'Legacy unit rent was not rounded to fixed precision';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM information_schema.tables
+              WHERE table_schema = 'public' AND table_name = 'PaymentAdjustment'
+            ) THEN
+              RAISE EXCEPTION 'PaymentAdjustment ledger table is missing';
+            END IF;
+            IF (SELECT "totalUnits" FROM "Property" WHERE "id" = 'legacy_property') <> 1 THEN
+              RAISE EXCEPTION 'Legacy property unit total was not reconciled';
+            END IF;
+          END $$;
+          SQL
+          SH
+          chmod +x scripts/rehearse-migrations.sh
+
+          cat > .github/workflows/e2e.yml <<'YAML'
+          name: Browser and migration rehearsal
+
+          on:
+            pull_request:
+            workflow_dispatch:
+
+          permissions:
+            contents: read
+
+          concurrency:
+            group: rehearsal-${{ github.event.pull_request.number || github.ref }}
+            cancel-in-progress: true
+
+          jobs:
+            rehearsal:
+              runs-on: ubuntu-latest
+              timeout-minutes: 60
+              services:
+                postgres:
+                  image: postgres:16
+                  env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: propmanager
+                  ports:
+                    - 5432:5432
+                  options: >-
+                    --health-cmd="pg_isready -U postgres -d propmanager"
+                    --health-interval=10s
+                    --health-timeout=5s
+                    --health-retries=10
+              env:
+                DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propmanager?schema=public
+                LEGACY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propmanager_legacy?schema=public
+                LEGACY_PSQL_URL: postgresql://postgres:postgres@localhost:5432/propmanager_legacy
+                AUTH_SECRET: rehearsal-auth-secret-with-more-than-thirty-two-characters
+                ADMIN_EMAIL: owner@example.com
+                ADMIN_PASSWORD: OwnerPassword123!
+                ADMIN_NAME: Rehearsal Owner
+                DEFAULT_ORGANIZATION_NAME: Rehearsal Properties
+                DEFAULT_CURRENCY: USD
+                DEFAULT_TIMEZONE: UTC
+                ENABLE_AI_COPILOT: "false"
+                CI: "true"
+              steps:
+                - uses: actions/checkout@v4
+                - uses: oven-sh/setup-bun@v2
+                  with:
+                    bun-version: latest
+                - run: bun ci
+                - run: bun run db:generate
+                - run: bash scripts/rehearse-migrations.sh
+                - run: bun run typecheck
+                - run: bun test tests
+                - run: bun run lint
+                - run: bun run build
+                - run: bunx playwright install --with-deps chromium
+                - run: bun run test:e2e
+                - uses: actions/upload-artifact@v4
+                  if: ${{ !cancelled() }}
+                  with:
+                    name: playwright-report
+                    path: playwright-report/
+                    retention-days: 14
+          YAML
+
+          rm -f .github/workflows/bootstrap-rehearsal.yml
+          git diff --check
+      - run: bun run db:generate
+      - run: bash scripts/rehearse-migrations.sh
+      - run: bun run typecheck
+      - run: bun test tests
+      - run: bun run lint
+      - run: bun run build
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:e2e
+      - name: Publish validated rehearsal layer
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test: add browser and migration rehearsal"
+          git push origin HEAD:agent/stabilize-core-workflows
