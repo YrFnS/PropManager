@@ -1,30 +1,38 @@
-# PropManager implementation progress
+# PropManager stabilization status
 
-The stabilization branch is being completed in validated phases.
+The stabilization release is implemented on `agent/stabilize-core-workflows` and validated as a complete system.
 
 ## Completed
 
-- Authentication and signed sessions
-- Organization ownership and role-based permissions
-- Historical lease support and relationship safeguards
-- Fixed-precision monetary storage
-- Organization-aware currency, date, and timezone formatting
+- Database-backed authentication with signed, HTTP-only sessions
+- Organization ownership, switching, memberships, and role enforcement
+- Historical lease support and cross-organization relationship safeguards
+- Fixed-precision monetary storage with decimal arithmetic
 - Immutable payment void and refund adjustments
-- Net-cash reporting after refunds
-- Payment lifecycle tests and validation
-- Role-aware finance screens and global quick actions
-- Server-hydrated permission context with organization switching preserved
-- Architecture safeguards for tenancy, roles, and immutable finance
-- Role-aware mutation visibility across Properties, Units, Tenants, Maintenance, and Messages
+- Net-cash dashboard and reporting after refunds
+- Organization-aware currency, locale, and timezone formatting
+- Role-aware controls across finance and legacy management screens
+- Stable login hydration and server-rendered permission markers
+- Permission-safe Properties loading states and shell navigation
+- Frozen Playwright dependency and browser security smoke tests
+- Fresh-install and populated legacy-database migration rehearsal
 
-## In progress
+## Validation passed
 
-- Reordering migrations into their true dependency sequence
-- Fresh-install and legacy-upgrade migration rehearsal
-- Chromium smoke tests for login and role enforcement
-- Reporting the exact bootstrap run on any remaining failure
+- `bun ci`
+- Prisma client generation
+- Fresh PostgreSQL migration deployment
+- Legacy prototype-schema upgrade with data repair assertions
+- TypeScript type checking
+- Unit and architecture tests
+- ESLint
+- Next.js production build
+- Chromium tests for localized login, RTL, owner controls, viewer control hiding, and direct API denial
 
-## Next
+## Before production
 
-- Remove temporary phase automation before review
-- Refresh the draft PR summary and final validation status
+1. Restore a recent production backup into staging.
+2. Run the documented migration and smoke-test sequence against that copy.
+3. Configure production secrets and organization defaults from `.env.example`.
+4. Keep dangerous administrative actions and the AI Copilot disabled until explicitly reviewed.
+5. Deploy the same reviewed commit that passed staging.
