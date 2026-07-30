@@ -52,8 +52,56 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - name: Put migrations in dependency order
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -d prisma/migrations/20260729_stabilize_relations ]; then
+            git mv prisma/migrations/20260729_stabilize_relations prisma/migrations/20260729_0001_stabilize_relations
+          fi
+          if [ -d prisma/migrations/20260729_multi_org_rbac ]; then
+            git mv prisma/migrations/20260729_multi_org_rbac prisma/migrations/20260729_0002_multi_org_rbac
+          fi
+          if [ -d prisma/migrations/20260729_decimal_money ]; then
+            git mv prisma/migrations/20260729_decimal_money prisma/migrations/20260729_0003_decimal_money
+          fi
+          if [ -d prisma/migrations/20260729_payment_lifecycle ]; then
+            git mv prisma/migrations/20260729_payment_lifecycle prisma/migrations/20260729_0004_payment_lifecycle
+          fi
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              '20260729_stabilize_relations': '20260729_0001_stabilize_relations',
+              '20260729_multi_org_rbac': '20260729_0002_multi_org_rbac',
+              '20260729_decimal_money': '20260729_0003_decimal_money',
+              '20260729_payment_lifecycle': '20260729_0004_payment_lifecycle',
+          }
+          excluded = {'.git', 'node_modules', '.next'}
+          for path in Path('.').rglob('*'):
+              if not path.is_file() or any(part in excluded for part in path.parts):
+                  continue
+              try:
+                  text = path.read_text()
+              except (UnicodeDecodeError, OSError):
+                  continue
+              updated = text
+              for old, new in replacements.items():
+                  updated = updated.replace(old, new)
+              if updated != text:
+                  path.write_text(updated)
+          PY
+
+          test -f prisma/migrations/20260729_0001_stabilize_relations/migration.sql
+          test -f prisma/migrations/20260729_0002_multi_org_rbac/migration.sql
+          test -f prisma/migrations/20260729_0003_decimal_money/migration.sql
+          test -f prisma/migrations/20260729_0004_payment_lifecycle/migration.sql
+          git diff --check
       - name: Install and lock Playwright
         run: bun add --dev @playwright/test@latest
+      - run: bun ci
       - run: bun run db:generate
       - run: bash scripts/rehearse-migrations.sh
       - run: bun run typecheck
