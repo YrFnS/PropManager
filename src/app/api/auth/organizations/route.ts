@@ -8,7 +8,7 @@ function sessionFromMembership(membership: {
   id: string;
   role: string;
   user: { id: string; email: string; name: string };
-  organization: { id: string; name: string; currency: string; locale: string };
+  organization: { id: string; name: string; currency: string; locale: string; timezone: string };
 }): SessionInput | null {
   const role = normalizeRole(membership.role);
   if (!role) return null;
@@ -22,6 +22,7 @@ function sessionFromMembership(membership: {
     role,
     currency: membership.organization.currency,
     locale: membership.organization.locale,
+    timezone: membership.organization.timezone,
   };
 }
 

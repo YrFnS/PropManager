@@ -49,6 +49,7 @@ export async function PATCH(request: NextRequest) {
     role: session.role,
     currency: organization.currency,
     locale: organization.locale,
+    timezone: organization.timezone,
   };
   const response = NextResponse.json({ organization, session: nextSession });
   return setSessionCookie(response, nextSession);

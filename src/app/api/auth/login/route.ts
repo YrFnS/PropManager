@@ -29,6 +29,7 @@ type LoginMembership = {
     name: string;
     currency: string;
     locale: string;
+    timezone: string;
   };
 };
 
@@ -48,6 +49,7 @@ function buildSession(
     role,
     currency: membership.organization.currency,
     locale: membership.organization.locale,
+    timezone: membership.organization.timezone,
   };
 }
 

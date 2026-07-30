@@ -16,6 +16,7 @@ export interface SessionPayload {
   role: AppRole;
   currency: string;
   locale: string;
+  timezone: string;
   exp: number;
 }
 
@@ -61,6 +62,7 @@ function decodePayload(value: string): SessionPayload | null {
       !isRole(payload.role) ||
       typeof payload.currency !== 'string' ||
       typeof payload.locale !== 'string' ||
+      typeof payload.timezone !== 'string' ||
       typeof payload.exp !== 'number'
     ) {
       return null;

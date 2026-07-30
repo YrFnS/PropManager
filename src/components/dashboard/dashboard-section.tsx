@@ -31,6 +31,7 @@ import { ar as arLocale } from 'date-fns/locale/ar';
 import AnimatedCounter from '@/components/ui/animated-counter';
 import HealthScoreCard from '@/components/dashboard/health-score-card';
 import { setRouteIntent } from '@/lib/route-intent';
+import { useOrganizationFormat } from '@/hooks/use-organization-format';
 
 interface PropertyRevenueItem {
   name: string;
@@ -73,6 +74,7 @@ export default function DashboardSection() {
   const tp = useTranslations('payments');
   const locale = useLocale();
   const router = useRouter();
+  const { formatCurrency, formatCompactCurrency, formatMonth } = useOrganizationFormat();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('thisMonth');
@@ -101,7 +103,7 @@ export default function DashboardSection() {
       items.push({
         id: `payment-${p.id}`,
         type: 'payment',
-        title: `${t('paymentReceived')} ${t('from')} ${tenantName} - ${tc('currency')}${p.amount?.toLocaleString() || 0}`,
+        title: `${t('paymentReceived')} ${t('from')} ${tenantName} - ${formatCurrency(Number(p.amount) || 0)}`,
         timestamp: new Date(p.createdAt),
         icon: CheckCircle2,
         iconColor: 'text-emerald-500',
@@ -133,7 +135,7 @@ export default function DashboardSection() {
 
     items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     return items.slice(0, 10);
-  }, [data, isAr, t, tc]);
+  }, [data, formatCurrency, isAr, t]);
 
   const revenueChartConfig: ChartConfig = {
     revenue: {
@@ -183,10 +185,10 @@ export default function DashboardSection() {
 
   // Stat card definitions — clean, minimal
   const statCards = [
-    { title: t('totalProperties'), value: stats.totalProperties, prefix: '', suffix: '', icon: Building2, sub: `${stats.occupiedUnits}/${stats.totalUnits} ${t('occupiedUnits')}`, trend: 'up' as const },
-    { title: t('occupancyRate'), value: stats.occupancyRate, prefix: '', suffix: '%', icon: DoorOpen, sub: stats.occupancyRate >= 80 ? t('healthy') : t('needsAttention'), trend: stats.occupancyRate >= 80 ? 'up' as const : 'down' as const },
-    { title: t('monthlyRevenue'), value: stats.monthlyRevenue, prefix: '$', suffix: '', icon: DollarSign, sub: `${stats.activeLeases} ${t('activeLeases') || 'active leases'}`, trend: 'up' as const },
-    { title: t('openRequests'), value: stats.openMaintenance, prefix: '', suffix: '', icon: Wrench, sub: stats.openMaintenance > 5 ? t('needsAttention') : t('underControl'), trend: stats.openMaintenance > 5 ? 'down' as const : 'up' as const },
+    { title: t('totalProperties'), value: stats.totalProperties, prefix: '', suffix: '', money: false, icon: Building2, sub: `${stats.occupiedUnits}/${stats.totalUnits} ${t('occupiedUnits')}`, trend: 'up' as const },
+    { title: t('occupancyRate'), value: stats.occupancyRate, prefix: '', suffix: '%', money: false, icon: DoorOpen, sub: stats.occupancyRate >= 80 ? t('healthy') : t('needsAttention'), trend: stats.occupancyRate >= 80 ? 'up' as const : 'down' as const },
+    { title: t('monthlyRevenue'), value: stats.monthlyRevenue, prefix: '', suffix: '', money: true, icon: DollarSign, sub: `${stats.activeLeases} ${t('activeLeases') || 'active leases'}`, trend: 'up' as const },
+    { title: t('openRequests'), value: stats.openMaintenance, prefix: '', suffix: '', money: false, icon: Wrench, sub: stats.openMaintenance > 5 ? t('needsAttention') : t('underControl'), trend: stats.openMaintenance > 5 ? 'down' as const : 'up' as const },
   ];
 
   const secondaryStats = [
@@ -206,7 +208,7 @@ export default function DashboardSection() {
 
   const formattedRevenueData = revenueData.map(d => ({
     ...d,
-    monthLabel: new Date(d.month + '-01').toLocaleDateString(isAr ? 'ar-SA' : 'en-US', { month: 'short', year: '2-digit' }),
+    monthLabel: formatMonth(`${d.month}-01`),
   }));
 
   return (
@@ -259,7 +261,7 @@ export default function DashboardSection() {
               <c.icon className="h-3.5 w-3.5 text-muted-foreground/60" />
             </div>
             <div className="flex items-baseline gap-1.5">
-              <AnimatedCounter value={c.value} prefix={c.prefix} suffix={c.suffix} className="text-2xl font-semibold tracking-tight" />
+              {c.money ? <span className="text-2xl font-semibold tracking-tight">{formatCurrency(c.value)}</span> : <AnimatedCounter value={c.value} prefix={c.prefix} suffix={c.suffix} className="text-2xl font-semibold tracking-tight" />}
               {c.trend === 'up' ? (
                 <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
               ) : (
@@ -325,12 +327,12 @@ export default function DashboardSection() {
                       axisLine={false}
                       tickMargin={8}
                       tick={{ fontSize: 11 }}
-                      tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
+                      tickFormatter={(value: number) => formatCompactCurrency(value)}
                       orientation={isAr ? 'right' : 'left'}
                     />
                     <ChartTooltip
                       content={<ChartTooltipContent
-                        formatter={(value) => `$${Number(value).toLocaleString()}`}
+                        formatter={(value) => formatCurrency(Number(value))}
                       />}
                     />
                     <Area
@@ -382,7 +384,7 @@ export default function DashboardSection() {
                   axisLine={false}
                   tickMargin={8}
                   tick={{ fontSize: 11 }}
-                  tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
+                  tickFormatter={(value: number) => formatCompactCurrency(value)}
                   orientation={isAr ? 'top' : 'bottom'}
                   reversed={isAr}
                 />
@@ -402,7 +404,7 @@ export default function DashboardSection() {
                       return (
                         <div className="space-y-1 text-xs">
                           <div className="font-medium">{payload.displayName}</div>
-                          <div>{t('monthlyRevenue')}: ${Number(value).toLocaleString()}</div>
+                          <div>{t('monthlyRevenue')}: {formatCurrency(Number(value))}</div>
                           <div>{t('occupancyRate')}: {payload.occupancyRate}% ({payload.occupied}/{payload.total})</div>
                         </div>
                       );
@@ -416,7 +418,7 @@ export default function DashboardSection() {
                   fill="hsl(var(--chart-2))"
                   label={{
                     position: isAr ? 'left' : 'right',
-                    formatter: (value: number) => `$${value.toLocaleString()}`,
+                    formatter: (value: number) => formatCompactCurrency(value),
                     fill: 'hsl(var(--foreground))',
                     fontSize: 10,
                   }}
@@ -636,7 +638,7 @@ export default function DashboardSection() {
                     <p className="text-[10px] text-muted-foreground">{p.lease?.unit?.unitNumber || ''}{p.lease?.unit?.property ? ` · ${isAr && p.lease.unit.property.nameAr ? p.lease.unit.property.nameAr : p.lease.unit.property.name}` : ''} · {new Date(p.dueDate).toLocaleDateString(isAr ? 'ar-SA' : undefined)}</p>
                   </div>
                   <div className="text-end shrink-0">
-                    <p className="text-xs font-semibold">{tc('currency')}{p.amount.toLocaleString()}</p>
+                    <p className="text-xs font-semibold">{formatCurrency(p.amount)}</p>
                     <Badge variant={p.status === 'paid' ? 'default' : p.status === 'late' ? 'destructive' : 'secondary'} className="text-[10px] px-1.5 py-0">{tp(p.status as any) || p.status}</Badge>
                   </div>
                 </div>

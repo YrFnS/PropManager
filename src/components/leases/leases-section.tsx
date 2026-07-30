@@ -30,6 +30,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DEFAULT_STATUS_COLOR, STATUS_COLORS } from '@/lib/status-config';
 import { useRouteIntent } from '@/lib/route-intent';
+import { useOrganizationFormat } from '@/hooks/use-organization-format';
 
 interface Lease {
   id: string;
@@ -83,7 +84,7 @@ export default function LeasesSection() {
   const tc = useTranslations('common');
   const locale = useLocale();
   const isAr = locale === 'ar';
-  const localeCode = isAr ? 'ar-IQ' : 'en-US';
+  const { formatCurrency, formatDate } = useOrganizationFormat();
 
   const [leases, setLeases] = useState<Lease[]>([]);
   const [stats, setStats] = useState({ activeLeases: 0, expiringSoon: 0, totalMonthlyRevenue: 0 });
@@ -100,13 +101,6 @@ export default function LeasesSection() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-
-  const currency = useMemo(
-    () => new Intl.NumberFormat(localeCode, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }),
-    [localeCode],
-  );
-  const formatCurrency = useCallback((value: number) => currency.format(value || 0), [currency]);
-  const formatDate = useCallback((value: string) => new Date(value).toLocaleDateString(localeCode), [localeCode]);
 
   const loadLeases = useCallback(
     async (page = pagination.page) => {

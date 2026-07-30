@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { Printer, Download, Building2 } from 'lucide-react';
 import { STATUS_COLORS, DEFAULT_STATUS_COLOR } from '@/lib/status-config';
 import { APP_CONFIG } from '@/lib/constants';
+import { useOrganizationFormat } from '@/hooks/use-organization-format';
 
 interface PaymentReceiptProps {
   open: boolean;
@@ -34,6 +35,7 @@ export default function PaymentReceipt({ open, onOpenChange, payment, receiptNum
   const tc = useTranslations('common');
   const locale = useLocale();
   const isAr = locale === 'ar';
+  const { formatCurrency, formatDate, formatLongDate } = useOrganizationFormat();
 
   if (!payment) return null;
 
@@ -126,11 +128,11 @@ export default function PaymentReceipt({ open, onOpenChange, payment, receiptNum
                   </tr>
                   <tr className="border-b">
                     <td className="px-4 py-2.5 font-medium text-gray-600">{tc('date')}</td>
-                    <td className="px-4 py-2.5 text-gray-900">{receiptDate.toLocaleDateString(isAr ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td>
+                    <td className="px-4 py-2.5 text-gray-900">{formatLongDate(receiptDate)}</td>
                   </tr>
                   <tr className="border-b bg-gray-50">
                     <td className="px-4 py-2.5 font-medium text-gray-600">{t('amount')}</td>
-                    <td className="px-4 py-2.5 text-gray-900 font-bold text-lg">{tc('currency')}{payment.amount.toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-gray-900 font-bold text-lg">{formatCurrency(payment.amount)}</td>
                   </tr>
                   <tr className="border-b">
                     <td className="px-4 py-2.5 font-medium text-gray-600">{t('method')}</td>
@@ -144,12 +146,12 @@ export default function PaymentReceipt({ open, onOpenChange, payment, receiptNum
                   )}
                   <tr className="border-b">
                     <td className="px-4 py-2.5 font-medium text-gray-600">{t('dueDate')}</td>
-                    <td className="px-4 py-2.5 text-gray-900">{new Date(payment.dueDate).toLocaleDateString(isAr ? 'ar-SA' : 'en-US')}</td>
+                    <td className="px-4 py-2.5 text-gray-900">{formatDate(payment.dueDate)}</td>
                   </tr>
                   {payment.paidDate && (
                     <tr className="border-b bg-gray-50">
                       <td className="px-4 py-2.5 font-medium text-gray-600">{t('paidDate')}</td>
-                      <td className="px-4 py-2.5 text-gray-900">{new Date(payment.paidDate).toLocaleDateString(isAr ? 'ar-SA' : 'en-US')}</td>
+                      <td className="px-4 py-2.5 text-gray-900">{formatDate(payment.paidDate)}</td>
                     </tr>
                   )}
                   <tr>
@@ -181,7 +183,7 @@ export default function PaymentReceipt({ open, onOpenChange, payment, receiptNum
             <div className="text-xs text-gray-400 space-y-0.5">
               <p>{APP_CONFIG.name} - {APP_CONFIG.description}</p>
               <p>{APP_CONFIG.contactEmail} · {APP_CONFIG.website}</p>
-              <p>{new Date().toLocaleDateString(isAr ? 'ar-SA' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              <p>{formatLongDate(new Date())}</p>
             </div>
           </div>
         </div>

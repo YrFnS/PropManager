@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
 import { DollarSign, Wrench, FileText, Lightbulb, Building2, TrendingUp } from 'lucide-react';
 import AnimatedCounter from '@/components/ui/animated-counter';
+import { useOrganizationFormat } from '@/hooks/use-organization-format';
 
 interface HealthScoreData {
   score: number;
@@ -145,6 +146,7 @@ export default function HealthScoreCard() {
   const tc = useTranslations('common');
   const locale = useLocale();
   const isAr = locale === 'ar';
+  const { formatCurrency } = useOrganizationFormat();
   const [data, setData] = useState<HealthScoreData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -233,7 +235,7 @@ export default function HealthScoreCard() {
           <div className="rounded-md bg-muted/40 p-2 text-center">
             <DollarSign className="h-3 w-3 text-muted-foreground mx-auto mb-0.5" />
             <p className="text-xs font-semibold" dir="ltr">
-              <AnimatedCounter value={data.summary.totalMonthlyRevenue} prefix="$" />
+              <span>{formatCurrency(data.summary.totalMonthlyRevenue)}</span>
             </p>
             <p className="text-[9px] text-muted-foreground">{t('monthlyRevenue')}</p>
           </div>

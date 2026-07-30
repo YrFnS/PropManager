@@ -33,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import AnimatedCounter from '@/components/ui/animated-counter';
 import EmptyState from '@/components/ui/empty-state';
 import { CHART_COLORS } from '@/lib/status-config';
+import { useOrganizationFormat } from '@/hooks/use-organization-format';
 
 interface ReportData {
   summary: {
@@ -69,19 +70,11 @@ export default function ReportsSection() {
   const tp = useTranslations('payments');
   const locale = useLocale();
   const isAr = locale === 'ar';
+  const { formatCurrency, formatCompactCurrency, formatMonth } = useOrganizationFormat();
 
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('thisMonth');
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/reports?period=${period}`)
@@ -106,10 +99,7 @@ export default function ReportsSection() {
   // Format month labels
   const formattedMonthlyRevenue = (data?.monthlyRevenue || []).map((d) => ({
     ...d,
-    monthLabel: new Date(d.month + '-01').toLocaleDateString(
-      isAr ? 'ar-SA' : 'en-US',
-      { month: 'short', year: '2-digit' }
-    ),
+    monthLabel: formatMonth(`${d.month}-01`),
   }));
 
   // Translate payment methods
@@ -207,8 +197,9 @@ export default function ReportsSection() {
     {
       title: t('totalRevenue'),
       value: summary.totalRevenue,
-      prefix: '$',
+      prefix: '',
       suffix: '',
+      money: true,
       icon: DollarSign,
       color: 'text-emerald-600',
       bg: 'bg-emerald-50 dark:bg-emerald-950/30',
@@ -219,8 +210,9 @@ export default function ReportsSection() {
     {
       title: t('totalExpected'),
       value: summary.totalExpected,
-      prefix: '$',
+      prefix: '',
       suffix: '',
+      money: true,
       icon: TrendingUp,
       color: 'text-sky-600',
       bg: 'bg-sky-50 dark:bg-sky-950/30',
@@ -233,6 +225,7 @@ export default function ReportsSection() {
       value: summary.collectionRate,
       prefix: '',
       suffix: '%',
+      money: false,
       icon: summary.collectionRate >= 80 ? TrendingUp : TrendingDown,
       color: summary.collectionRate >= 80 ? 'text-green-600' : 'text-amber-600',
       bg: summary.collectionRate >= 80 ? 'bg-green-50 dark:bg-green-950/30' : 'bg-amber-50 dark:bg-amber-950/30',
@@ -245,8 +238,9 @@ export default function ReportsSection() {
     {
       title: t('outstandingAmount'),
       value: summary.outstandingAmount,
-      prefix: '$',
+      prefix: '',
       suffix: '',
+      money: true,
       icon: AlertCircle,
       color: 'text-red-600',
       bg: 'bg-red-50 dark:bg-red-950/30',
@@ -294,7 +288,7 @@ export default function ReportsSection() {
                 <div className="flex items-center justify-between">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-muted-foreground">{c.title}</p>
-                    <AnimatedCounter value={c.value} prefix={c.prefix} suffix={c.suffix} className="text-3xl font-extrabold mt-1 tracking-tight" />
+                    {c.money ? <p className="text-3xl font-extrabold mt-1 tracking-tight">{formatCurrency(c.value)}</p> : <AnimatedCounter value={c.value} prefix={c.prefix} suffix={c.suffix} className="text-3xl font-extrabold mt-1 tracking-tight" />}
                   </div>
                   <div className={`p-3 rounded-xl ${c.bg} flex-shrink-0 ms-3`}>
                     <c.icon className={`h-5 w-5 ${c.color}`} />
@@ -335,11 +329,11 @@ export default function ReportsSection() {
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
-                    tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
+                    tickFormatter={(value: number) => formatCompactCurrency(value)}
                     orientation={isAr ? 'right' : 'left'}
                   />
                   <ChartTooltip
-                    content={<ChartTooltipContent formatter={(value) => `$${Number(value).toLocaleString()}`} />}
+                    content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />}
                   />
                   <Area
                     type="monotone"
@@ -384,7 +378,7 @@ export default function ReportsSection() {
                       tickLine={false}
                       axisLine={false}
                       tickMargin={8}
-                      tickFormatter={(value: number) => `$${(value / 1000).toFixed(0)}k`}
+                      tickFormatter={(value: number) => formatCompactCurrency(value)}
                       orientation={isAr ? 'top' : 'bottom'}
                       reversed={isAr}
                     />
@@ -393,11 +387,11 @@ export default function ReportsSection() {
                       dataKey="displayName"
                       tickLine={false}
                       axisLine={false}
-                      width={isMobile ? 80 : 120}
+                      width={100}
                       orientation={isAr ? 'right' : 'left'}
                     />
                     <ChartTooltip
-                      content={<ChartTooltipContent formatter={(value) => `$${Number(value).toLocaleString()}`} />}
+                      content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />}
                     />
                     <Bar
                       dataKey="revenue"
@@ -449,7 +443,7 @@ export default function ReportsSection() {
                         ))}
                       </Pie>
                       <ChartTooltip
-                        content={<ChartTooltipContent nameKey="label" formatter={(value) => `$${Number(value).toLocaleString()}`} />}
+                        content={<ChartTooltipContent nameKey="label" formatter={(value) => formatCurrency(Number(value))} />}
                       />
                       <ChartLegend content={<ChartLegendContent nameKey="label" />} />
                     </PieChart>
@@ -467,7 +461,7 @@ export default function ReportsSection() {
                         </div>
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
                           <span>{pm.count} {t('paymentCount').toLowerCase()}</span>
-                          <span className="font-semibold text-foreground">{tc('currency')}{pm.amount.toLocaleString()}</span>
+                          <span className="font-semibold text-foreground">{formatCurrency(pm.amount)}</span>
                         </div>
                       </div>
                     ))}
@@ -532,7 +526,7 @@ export default function ReportsSection() {
                           )}
                         </TableCell>
                         <TableCell className="text-end font-semibold">
-                          {tc('currency')}{tenant.totalPaid.toLocaleString()}
+                          {formatCurrency(tenant.totalPaid)}
                         </TableCell>
                         <TableCell className="text-end">
                           <Badge variant="secondary">{tenant.paymentCount}</Badge>

@@ -31,6 +31,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DEFAULT_STATUS_COLOR, STATUS_COLORS } from '@/lib/status-config';
 import { useRouteIntent } from '@/lib/route-intent';
+import { useOrganizationFormat } from '@/hooks/use-organization-format';
 
 interface Payment {
   id: string;
@@ -83,7 +84,7 @@ export default function PaymentsSection() {
   const tc = useTranslations('common');
   const locale = useLocale();
   const isAr = locale === 'ar';
-  const localeCode = isAr ? 'ar-IQ' : 'en-US';
+  const { formatCurrency, formatDate } = useOrganizationFormat();
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [stats, setStats] = useState({ totalCollected: 0, totalPending: 0, totalLate: 0 });
@@ -102,21 +103,6 @@ export default function PaymentsSection() {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-
-  const currencyFormatter = useMemo(
-    () => new Intl.NumberFormat(localeCode, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }),
-    [localeCode],
-  );
-
-  const formatCurrency = useCallback(
-    (value: number) => currencyFormatter.format(Number.isFinite(value) ? value : 0),
-    [currencyFormatter],
-  );
-
-  const formatDate = useCallback(
-    (value: string | null) => (value ? new Date(value).toLocaleDateString(localeCode) : '—'),
-    [localeCode],
-  );
 
   const loadPayments = useCallback(
     async (page = pagination.page) => {
