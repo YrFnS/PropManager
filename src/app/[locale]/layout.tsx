@@ -51,7 +51,14 @@ export default async function LocaleLayout({
   const session = await verifySessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
 
   return (
-    <html lang={locale} dir={dir} suppressHydrationWarning>
+    <html
+      lang={locale}
+      dir={dir}
+      data-role={session?.role}
+      data-pm-role={session?.role}
+      data-organization={session?.organizationId}
+      suppressHydrationWarning
+    >
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${notoArabic.variable} antialiased bg-background text-foreground`}
       >
