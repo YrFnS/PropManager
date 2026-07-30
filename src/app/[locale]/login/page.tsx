@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useLocale } from 'next-intl';
 import { Building2, Loader2, LockKeyhole } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,9 +36,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!hydrated || submitting) return;
+
+    const formData = new FormData(event.currentTarget);
+    const submittedEmail = String(formData.get('email') || email).trim();
+    const submittedPassword = String(formData.get('password') || password);
+
     setError('');
     setSubmitting(true);
 
@@ -46,12 +57,13 @@ export default function LoginPage() {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: submittedEmail, password: submittedPassword }),
       });
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
         setError(data?.error || copy.genericError);
+        setSubmitting(false);
         return;
       }
 
@@ -87,11 +99,16 @@ export default function LoginPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4" onSubmit={handleSubmit}>
+          <form
+            className="space-y-4"
+            data-hydrated={hydrated ? 'true' : 'false'}
+            onSubmit={handleSubmit}
+          >
             <div className="space-y-2">
               <Label htmlFor="email">{copy.email}</Label>
               <Input
                 id="email"
+                name="email"
                 type="email"
                 autoComplete="username"
                 required
@@ -103,6 +120,7 @@ export default function LoginPage() {
               <Label htmlFor="password">{copy.password}</Label>
               <Input
                 id="password"
+                name="password"
                 type="password"
                 autoComplete="current-password"
                 required
@@ -115,7 +133,7 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
-            <Button className="w-full gap-2" type="submit" disabled={submitting}>
+            <Button className="w-full gap-2" type="submit" disabled={!hydrated || submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />}
               {submitting ? copy.signingIn : copy.submit}
             </Button>
