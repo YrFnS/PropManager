@@ -39,6 +39,7 @@ export async function getFreshSession(session: SessionPayload): Promise<SessionI
     role,
     currency: membership.organization.currency,
     locale: membership.organization.locale,
+    timezone: membership.organization.timezone,
   };
 }
 
