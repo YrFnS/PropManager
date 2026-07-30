@@ -110,16 +110,10 @@ jobs:
                       index = cursor - 1
               index += 1
 
-          for name, script in scripts:
-              if name.lower().startswith('publish'):
-                  continue
-              filtered = '\n'.join(
-                  line for line in script.splitlines()
-                  if not ('rm -f' in line and '.github/workflows/' in line)
-              )
+          def run_script(name, command):
               print(f'::group::{name}')
               process = subprocess.run(
-                  ['bash', '-lc', filtered],
+                  ['bash', '-lc', command],
                   text=True,
                   stdout=subprocess.PIPE,
                   stderr=subprocess.STDOUT,
@@ -135,8 +129,22 @@ jobs:
                       f'```text\n{tail}\n```\n'
                   )
                   raise SystemExit(process.returncode)
+
+          for name, script in scripts:
+              if name.lower().startswith('publish'):
+                  continue
+              if phase_name == 'legacy-screen role visibility' and name == 'Mark mutation controls with their resource permission':
+                  run_script('Strictly tag legacy mutation controls', 'node scripts/mark-role-controls.mjs')
+              filtered = '\n'.join(
+                  line for line in script.splitlines()
+                  if not ('rm -f' in line and '.github/workflows/' in line)
+              )
+              run_script(name, filtered)
               if preserved_session_provider is not None and name == 'Add shared permission rules and tests':
                   Path('src/components/auth/session-provider.tsx').write_text(preserved_session_provider)
+
+          if phase_name == 'legacy-screen role visibility':
+              Path('scripts/mark-role-controls.mjs').unlink(missing_ok=True)
           PY
           git diff --check
       - name: Publish the validated phase
