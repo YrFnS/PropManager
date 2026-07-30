@@ -29,5 +29,6 @@ jobs:
       - run: bun ci
       - run: bun run db:generate
       - run: bun run typecheck
+      - run: bun test tests
       - run: bun run lint
       - run: bun run build
