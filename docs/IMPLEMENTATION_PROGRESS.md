@@ -9,18 +9,16 @@ The stabilization branch is being completed in validated phases.
 - Historical lease support and relationship safeguards
 - Fixed-precision monetary storage
 - Organization-aware currency, date, and timezone formatting
+- Immutable payment void and refund adjustments
+- Net-cash reporting after refunds
+- Payment lifecycle tests and validation
 
 ## In progress
 
-- Immutable payment void and refund adjustments
-- Net-cash reporting after refunds
-- Automated validation of the accounting phase
-- Retrying the accounting phase with a heredoc-safe executor
-- Verifying organization scoping for payment adjustments
-- Validating shared Decimal helpers and Bun tests
+- Role-aware finance screens and global quick actions
 
 ## Next
 
-- Complete role-aware mutation visibility
+- Complete role-aware mutation visibility across legacy screens
 - Add browser smoke tests and migration rehearsal
 - Remove temporary phase automation before review
