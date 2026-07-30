@@ -269,6 +269,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <Link
           key={item.key}
           href={`/${item.key}`}
+          prefetch={false}
           onClick={() => isMobile && setSidebarOpen(false)}
           className={cn(
             'flex items-center gap-3 w-full px-3 py-2.5 text-sm transition-all duration-150',
@@ -288,6 +289,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Link
         key={item.key}
         href={`/${item.key}`}
+        prefetch={false}
         onClick={() => isMobile && setSidebarOpen(false)}
         className={cn(
           'flex items-center gap-3 w-full px-3 min-h-11 py-2.5 text-sm transition-all duration-150',
@@ -421,7 +423,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-2 px-3 h-14 border-b shrink-0">
           <Building2 className="h-6 w-6 text-primary shrink-0" />
           {sidebarOpen && (
-            <Link href="/dashboard" className="font-bold text-lg truncate hover:text-primary transition-colors">
+            <Link href="/dashboard" prefetch={false} className="font-bold text-lg truncate hover:text-primary transition-colors">
               {tc('appName')}
             </Link>
           )}
