@@ -58,6 +58,10 @@ jobs:
 
           path, job_name, phase_name = selected
           Path('/tmp/phase-name.txt').write_text(phase_name)
+          preserved_session_provider = None
+          if phase_name == 'role-aware finance UI':
+              preserved_session_provider = Path('src/components/auth/session-provider.tsx').read_text()
+
           lines = path.read_text().splitlines()
           job_marker = f'  {job_name}:'
           try:
@@ -131,6 +135,8 @@ jobs:
                       f'```text\n{tail}\n```\n'
                   )
                   raise SystemExit(process.returncode)
+              if preserved_session_provider is not None and name == 'Add shared permission rules and tests':
+                  Path('src/components/auth/session-provider.tsx').write_text(preserved_session_provider)
           PY
           git diff --check
       - name: Publish the validated phase
