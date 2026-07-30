@@ -34,6 +34,7 @@ import { KeyboardShortcutsDialog, useKeyboardShortcutsHelp } from '@/components/
 import { AICopilot } from '@/components/layout/ai-copilot';
 import BackToTop from '@/components/ui/back-to-top';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useSession } from '@/components/auth/session-provider';
 
 type Section = 'dashboard' | 'properties' | 'units' | 'tenants' | 'leases' | 'payments' | 'maintenance' | 'messages' | 'reports' | 'settings';
 
@@ -101,6 +102,7 @@ const sectionAddActions: Record<string, string> = {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { sidebarOpen, setSidebarOpen, aiCopilotOpen, setAiCopilotOpen } = useAppStore();
+  const { canWrite } = useSession();
   const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
@@ -190,7 +192,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         const addAction = sectionAddActions[currentSection];
-        if (addAction) {
+        if (addAction && canWrite(currentSection)) {
           window.dispatchEvent(new CustomEvent('command-palette-action', { detail: { action: addAction } }));
         }
         return;
@@ -220,7 +222,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isMobile, sidebarOpen, setSidebarOpen, currentSection, theme, setTheme, locale, router, pathname, aiCopilotOpen, setAiCopilotOpen]);
+  }, [isMobile, sidebarOpen, setSidebarOpen, currentSection, theme, setTheme, locale, router, pathname, canWrite, aiCopilotOpen, setAiCopilotOpen]);
 
   const getInitials = (name: string) => {
     const parts = name.trim().split(' ');

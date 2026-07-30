@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSession } from '@/components/auth/session-provider';
 import { useAppStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRouter } from '@/i18n/routing';
@@ -98,6 +99,7 @@ const typeGroupOrder = ['properties', 'tenants', 'units', 'leases', 'payments', 
 
 export function CommandPalette() {
   const { commandPaletteOpen, setCommandPaletteOpen } = useAppStore();
+  const { canWrite } = useSession();
   const router = useRouter();
   const tc = useTranslations('common');
   const tNav = useTranslations('nav');
@@ -169,6 +171,7 @@ export function CommandPalette() {
   };
 
   const handleActionSelect = (action: ActionItem) => {
+    if (!canWrite(action.section)) return;
     setRouteIntent({ section: action.section, action: 'add' });
     router.push(action.section);
     setCommandPaletteOpen(false);
@@ -261,7 +264,7 @@ export function CommandPalette() {
 
         {/* Quick Actions Group */}
         <CommandGroup heading={tc('actions')}>
-          {actionItems.map((action) => (
+          {actionItems.filter((action) => canWrite(action.section)).map((action) => (
             <CommandItem
               key={action.key}
               value={action.key}

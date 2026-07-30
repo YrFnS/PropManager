@@ -1,422 +1,147 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useLocale, useTranslations } from 'next-intl';
-import {
-  ChevronDown,
-  Clock,
-  DollarSign,
-  Download,
-  FileCheck,
-  FileText,
-  Pencil,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocale } from 'next-intl';
+import { Download, FileText, Loader2, Pencil, Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSession } from '@/components/auth/session-provider';
 import { Badge } from '@/components/ui/badge';
-import { BulkActionsBar } from '@/components/ui/bulk-actions-bar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import EmptyState from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DEFAULT_STATUS_COLOR, STATUS_COLORS } from '@/lib/status-config';
-import { useRouteIntent } from '@/lib/route-intent';
-import { useOrganizationFormat } from '@/hooks/use-organization-format';
 
 interface Lease {
-  id: string;
-  startDate: string;
-  endDate: string;
-  rentAmount: number;
-  deposit: number | null;
-  status: string;
+  id: string; startDate: string; endDate: string; rentAmount: number; deposit: number | null; status: string;
   tenant: { id: string; name: string; nameAr: string | null };
   unit: { id: string; unitNumber: string; property: { name: string; nameAr: string | null } };
   _count: { payments: number };
 }
+interface UnitOption { id: string; unitNumber: string; status: string; rentAmount: number; property: { name: string; nameAr: string | null } }
+interface TenantOption { id: string; name: string; nameAr: string | null }
+const emptyForm = { unitId: '', tenantId: '', startDate: '', endDate: '', rentAmount: '', deposit: '', status: 'active' };
 
-interface UnitOption {
-  id: string;
-  unitNumber: string;
-  status: string;
-  property: { name: string; nameAr: string | null };
-}
-
-interface TenantOption {
-  id: string;
-  name: string;
-  nameAr: string | null;
-}
-
-interface Pagination {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-}
-
-const emptyForm = {
-  unitId: '',
-  tenantId: '',
-  startDate: '',
-  endDate: '',
-  rentAmount: '',
-  deposit: '',
-  status: 'active',
-};
-
-async function responseError(response: Response, fallback: string) {
-  const payload = await response.json().catch(() => null);
-  return typeof payload?.error === 'string' ? payload.error : fallback;
-}
+const COPY = {
+  en: {
+    title: 'Leases', add: 'Create lease', edit: 'Edit lease', export: 'Export CSV', tenant: 'Tenant', unit: 'Unit / property',
+    start: 'Start date', end: 'End date', rent: 'Monthly rent', deposit: 'Deposit', status: 'Status', payments: 'Payments', actions: 'Actions',
+    active: 'Active', expired: 'Expired', terminated: 'Terminated', all: 'All statuses', save: 'Save', cancel: 'Cancel', selectTenant: 'Select tenant',
+    selectUnit: 'Select available unit', readOnly: 'Your role has read-only access to leases.', noData: 'No leases match the current filter.',
+    previous: 'Previous', next: 'Next', activeLeases: 'Active leases', expiring: 'Expiring in 30 days', revenue: 'Active monthly rent', loadError: 'Unable to load leases.',
+  },
+  ar: {
+    title: 'العقود', add: 'إنشاء عقد', edit: 'تعديل العقد', export: 'تصدير CSV', tenant: 'المستأجر', unit: 'الوحدة / العقار',
+    start: 'تاريخ البدء', end: 'تاريخ الانتهاء', rent: 'الإيجار الشهري', deposit: 'التأمين', status: 'الحالة', payments: 'الدفعات', actions: 'الإجراءات',
+    active: 'نشط', expired: 'منتهي', terminated: 'ملغى', all: 'كل الحالات', save: 'حفظ', cancel: 'إلغاء', selectTenant: 'اختر مستأجراً',
+    selectUnit: 'اختر وحدة متاحة', readOnly: 'صلاحيتك تتيح عرض العقود فقط.', noData: 'لا توجد عقود مطابقة للفلتر.', previous: 'السابق', next: 'التالي',
+    activeLeases: 'العقود النشطة', expiring: 'تنتهي خلال 30 يوماً', revenue: 'الإيجار الشهري النشط', loadError: 'تعذر تحميل العقود.',
+  },
+} as const;
 
 export default function LeasesSection() {
-  const t = useTranslations('leases');
-  const tc = useTranslations('common');
-  const locale = useLocale();
+  const locale = useLocale() as 'en' | 'ar';
+  const copy = COPY[locale] || COPY.en;
   const isAr = locale === 'ar';
-  const { formatCurrency, formatDate } = useOrganizationFormat();
-
+  const { session, canWrite } = useSession();
+  const writable = canWrite('leases');
   const [leases, setLeases] = useState<Lease[]>([]);
+  const [units, setUnits] = useState<UnitOption[]>([]);
+  const [tenants, setTenants] = useState<TenantOption[]>([]);
   const [stats, setStats] = useState({ activeLeases: 0, expiringSoon: 0, totalMonthlyRevenue: 0 });
-  const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 1 });
-  const [unitOptions, setUnitOptions] = useState<UnitOption[]>([]);
-  const [tenantOptions, setTenantOptions] = useState<TenantOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [form, setForm] = useState({ ...emptyForm });
+  const [pagination, setPagination] = useState({ page: 1, totalPages: 1, total: 0 });
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ ...emptyForm });
 
-  const loadLeases = useCallback(
-    async (page = pagination.page) => {
-      setLoading(true);
-      setError('');
-      const params = new URLSearchParams({ page: String(page), limit: String(pagination.limit) });
+  const money = useMemo(() => new Intl.NumberFormat(isAr ? 'ar-IQ' : 'en-US', { style: 'currency', currency: session?.currency || 'USD', maximumFractionDigits: 2 }), [isAr, session?.currency]);
+  const date = (value: string) => new Intl.DateTimeFormat(isAr ? 'ar-IQ' : 'en-US').format(new Date(value));
+  const name = (item: { name: string; nameAr: string | null }) => isAr && item.nameAr ? item.nameAr : item.name;
+  const statusLabel = (status: string) => ({ active: copy.active, expired: copy.expired, terminated: copy.terminated } as Record<string, string>)[status] || status;
+
+  const load = useCallback(async (page = 1) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '25' });
       if (statusFilter !== 'all') params.set('status', statusFilter);
-      try {
-        const response = await fetch(`/api/leases?${params.toString()}`, { cache: 'no-store' });
-        if (!response.ok) throw new Error(await responseError(response, tc('error')));
-        const payload = await response.json();
-        setLeases(Array.isArray(payload.data) ? payload.data : []);
-        setStats(payload.stats || { activeLeases: 0, expiringSoon: 0, totalMonthlyRevenue: 0 });
-        setPagination(payload.pagination || { page, limit: pagination.limit, total: 0, totalPages: 1 });
-        setSelectedIds(new Set());
-      } catch (loadError) {
-        const message = loadError instanceof Error ? loadError.message : tc('error');
-        setError(message);
-        setLeases([]);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [pagination.limit, pagination.page, statusFilter, tc],
-  );
+      const response = await fetch(`/api/leases?${params}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || copy.loadError);
+      setLeases(data.data || []);
+      setStats(data.stats || { activeLeases: 0, expiringSoon: 0, totalMonthlyRevenue: 0 });
+      setPagination(data.pagination || { page, totalPages: 1, total: 0 });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : copy.loadError);
+      setLeases([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, copy.loadError]);
 
+  useEffect(() => { void load(1); }, [load]);
   useEffect(() => {
-    void loadLeases(1);
-  }, [statusFilter]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    let cancelled = false;
     Promise.all([
-      fetch('/api/units?limit=200', { cache: 'no-store' }).then(async (response) => {
-        if (!response.ok) throw new Error(await responseError(response, tc('error')));
-        return response.json();
-      }),
-      fetch('/api/tenants?limit=200&status=active', { cache: 'no-store' }).then(async (response) => {
-        if (!response.ok) throw new Error(await responseError(response, tc('error')));
-        return response.json();
-      }),
-    ])
-      .then(([unitsPayload, tenantsPayload]) => {
-        if (cancelled) return;
-        setUnitOptions(Array.isArray(unitsPayload.data) ? unitsPayload.data : []);
-        setTenantOptions(Array.isArray(tenantsPayload.data) ? tenantsPayload.data : []);
-      })
-      .catch((loadError) => {
-        if (!cancelled) toast.error(loadError instanceof Error ? loadError.message : tc('error'));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tc]);
+      fetch('/api/units?limit=200').then((response) => response.json()),
+      fetch('/api/tenants?limit=200').then((response) => response.json()),
+    ]).then(([unitData, tenantData]) => {
+      setUnits(unitData.data || []);
+      setTenants(tenantData.data || []);
+    }).catch(() => { setUnits([]); setTenants([]); });
+  }, []);
 
-  const statusLabel = useCallback(
-    (status: string) => {
-      const labels: Record<string, string> = {
-        active: t('active'),
-        expired: t('expired'),
-        terminated: t('terminated'),
-      };
-      return labels[status] || status;
-    },
-    [t],
-  );
-
-  const openAdd = () => {
-    setEditingId(null);
-    setForm({ ...emptyForm });
-    setDialogOpen(true);
-  };
-
+  const openAdd = () => { setEditingId(null); setForm({ ...emptyForm }); setFormOpen(true); };
   const openEdit = (lease: Lease) => {
     setEditingId(lease.id);
-    setForm({
-      unitId: lease.unit.id,
-      tenantId: lease.tenant.id,
-      startDate: lease.startDate.split('T')[0],
-      endDate: lease.endDate.split('T')[0],
-      rentAmount: String(lease.rentAmount),
-      deposit: lease.deposit == null ? '' : String(lease.deposit),
-      status: lease.status,
-    });
-    setDialogOpen(true);
+    setForm({ unitId: lease.unit.id, tenantId: lease.tenant.id, startDate: lease.startDate.split('T')[0], endDate: lease.endDate.split('T')[0], rentAmount: String(lease.rentAmount), deposit: lease.deposit == null ? '' : String(lease.deposit), status: lease.status });
+    setFormOpen(true);
   };
 
-  const openLeaseRecord = async (leaseId: string) => {
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setSaving(true);
     try {
-      const response = await fetch(`/api/leases?id=${encodeURIComponent(leaseId)}&limit=1`, { cache: 'no-store' });
-      if (!response.ok) throw new Error(await responseError(response, tc('error')));
-      const payload = await response.json();
-      const lease = Array.isArray(payload.data) ? payload.data[0] : null;
-      if (!lease) throw new Error(isAr ? 'لم يتم العثور على عقد الإيجار.' : 'Lease not found.');
-      openEdit(lease);
-    } catch (recordError) {
-      toast.error(recordError instanceof Error ? recordError.message : tc('error'));
-    }
-  };
-
-  useRouteIntent({ section: 'leases', onAdd: openAdd, onRecord: openLeaseRecord });
-
-  const handleSubmit = async () => {
-    const rentAmount = Number.parseFloat(form.rentAmount);
-    const deposit = form.deposit ? Number.parseFloat(form.deposit) : null;
-    if (!Number.isFinite(rentAmount) || rentAmount < 0) {
-      toast.error(isAr ? 'أدخل مبلغ إيجار صحيحاً.' : 'Enter a valid rent amount.');
-      return;
-    }
-    if (form.endDate <= form.startDate) {
-      toast.error(isAr ? 'يجب أن يكون تاريخ النهاية بعد تاريخ البداية.' : 'The end date must be after the start date.');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const payload = {
-        unitId: form.unitId,
-        tenantId: form.tenantId,
-        startDate: form.startDate,
-        endDate: form.endDate,
-        rentAmount,
-        deposit: deposit !== null && Number.isFinite(deposit) ? deposit : null,
-        status: form.status,
-      };
       const response = await fetch('/api/leases', {
-        method: editingId ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editingId ? { id: editingId, ...payload } : payload),
+        method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...(editingId ? { id: editingId } : {}), ...form, rentAmount: Number(form.rentAmount), deposit: form.deposit ? Number(form.deposit) : null }),
       });
-      if (!response.ok) throw new Error(await responseError(response, tc('error')));
-      toast.success(editingId ? tc('updatedSuccessfully') : tc('createdSuccessfully'));
-      setDialogOpen(false);
-      setEditingId(null);
-      setForm({ ...emptyForm });
-      await loadLeases();
-    } catch (submitError) {
-      toast.error(submitError instanceof Error ? submitError.message : tc('error'));
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to save lease.');
+      setFormOpen(false);
+      await load(pagination.page);
+      toast.success(copy.save);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save lease.');
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   };
 
-  const deleteLease = async () => {
-    if (!deleteId) return;
-    try {
-      const response = await fetch(`/api/leases?id=${encodeURIComponent(deleteId)}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error(await responseError(response, tc('error')));
-      toast.success(tc('deletedSuccessfully'));
-      await loadLeases();
-    } catch (deleteError) {
-      toast.error(deleteError instanceof Error ? deleteError.message : tc('error'));
-    } finally {
-      setDeleteId(null);
-    }
+  const exportCsv = () => {
+    const headers = [copy.tenant, copy.unit, copy.start, copy.end, copy.rent, copy.deposit, copy.status, copy.payments];
+    const rows = leases.map((lease) => [name(lease.tenant), `${lease.unit.unitNumber} - ${name(lease.unit.property)}`, date(lease.startDate), date(lease.endDate), lease.rentAmount, lease.deposit || '', statusLabel(lease.status), lease._count.payments]);
+    const csv = '\ufeff' + [headers, ...rows].map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a'); link.href = url; link.download = 'leases.csv'; link.click(); URL.revokeObjectURL(url);
   };
 
-  const runBulk = async (requests: Promise<Response>[], successLabel: string) => {
-    const responses = await Promise.all(requests);
-    const succeeded = responses.filter((response) => response.ok).length;
-    const failed = responses.length - succeeded;
-    if (succeeded) toast.success(`${succeeded} ${successLabel}`);
-    if (failed) {
-      const firstFailure = responses.find((response) => !response.ok);
-      toast.error(`${failed} ${isAr ? 'فشلت' : 'failed'}: ${firstFailure ? await responseError(firstFailure, tc('error')) : tc('error')}`);
-    }
-  };
-
-  const bulkDelete = async () => {
-    try {
-      await runBulk(
-        Array.from(selectedIds, (id) => fetch(`/api/leases?id=${encodeURIComponent(id)}`, { method: 'DELETE' })),
-        tc('deletedSuccessfully'),
-      );
-      setBulkDeleteOpen(false);
-      await loadLeases();
-    } catch {
-      toast.error(tc('error'));
-    }
-  };
-
-  const bulkStatus = async (status: string) => {
-    try {
-      await runBulk(
-        Array.from(selectedIds, (id) =>
-          fetch('/api/leases', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, status }),
-          }),
-        ),
-        tc('updatedSuccessfully'),
-      );
-      await loadLeases();
-    } catch {
-      toast.error(tc('error'));
-    }
-  };
-
-  const exportRows = (rowsToExport: Lease[], filename: string) => {
-    const headers = isAr
-      ? ['المستأجر', 'العقار / الوحدة', 'البداية', 'النهاية', 'الإيجار', 'التأمين', 'الحالة']
-      : ['Tenant', 'Property / Unit', 'Start date', 'End date', 'Rent', 'Deposit', 'Status'];
-    const rows = rowsToExport.map((lease) => [
-      isAr && lease.tenant.nameAr ? lease.tenant.nameAr : lease.tenant.name,
-      `${lease.unit.unitNumber} - ${isAr && lease.unit.property.nameAr ? lease.unit.property.nameAr : lease.unit.property.name}`,
-      formatDate(lease.startDate),
-      formatDate(lease.endDate),
-      String(lease.rentAmount),
-      lease.deposit == null ? '' : String(lease.deposit),
-      statusLabel(lease.status),
-    ]);
-    const csv = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const toggleSelected = (id: string) => {
-    setSelectedIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-  const selectAll = () => setSelectedIds(new Set(leases.map((lease) => lease.id)));
-  const clearSelection = () => setSelectedIds(new Set());
-
-  const selectableUnits = unitOptions.filter(
-    (unit) => unit.status === 'available' || unit.id === form.unitId || form.status !== 'active',
-  );
-
-  const cards = [
-    { title: t('activeLeases'), value: String(stats.activeLeases), icon: FileCheck, tone: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' },
-    { title: t('expiringSoon'), value: String(stats.expiringSoon), icon: Clock, tone: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
-    { title: t('totalMonthlyRevenue'), value: formatCurrency(stats.totalMonthlyRevenue), icon: DollarSign, tone: 'text-teal-600 bg-teal-50 dark:bg-teal-950/30' },
-  ];
+  const availableUnits = units.filter((unit) => unit.status === 'available' || unit.id === form.unitId);
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
-          {pagination.total > 0 && <Badge variant="secondary">{pagination.total}</Badge>}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" disabled={!leases.length} onClick={() => exportRows(leases, 'leases.csv')}><Download className="me-2 h-4 w-4" />{tc('exportCsv')}</Button>
-          <Button onClick={openAdd}><Plus className="me-2 h-4 w-4" />{t('addLease')}</Button>
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        {cards.map(({ title, value, icon: Icon, tone }) => (
-          <Card key={title}><CardContent className="flex items-center justify-between p-5"><div><p className="text-sm text-muted-foreground">{title}</p><p className="mt-1 text-2xl font-semibold">{value}</p></div><div className={`rounded-xl p-3 ${tone}`}><Icon className="h-5 w-5" /></div></CardContent></Card>
-        ))}
-      </div>
-
-      <Select value={statusFilter} onValueChange={setStatusFilter}>
-        <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder={t('allStatuses')} /></SelectTrigger>
-        <SelectContent><SelectItem value="all">{t('allStatuses')}</SelectItem><SelectItem value="active">{t('active')}</SelectItem><SelectItem value="expired">{t('expired')}</SelectItem><SelectItem value="terminated">{t('terminated')}</SelectItem></SelectContent>
-      </Select>
-
-      {error && <div role="alert" className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 sm:flex-row sm:items-center sm:justify-between"><span className="text-sm text-destructive">{error}</span><Button variant="outline" size="sm" onClick={() => void loadLeases()}>{tc('refresh')}</Button></div>}
-
-      {loading ? (
-        <div className="space-y-3">{[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-16 w-full" />)}</div>
-      ) : !leases.length ? (
-        <EmptyState icon={FileText} title={t('title')} description={t('noLeasesDescription')} actionLabel={t('addLease')} onAction={openAdd} />
-      ) : (
-        <>
-          <div className="grid gap-3 md:hidden">
-            {leases.map((lease) => (
-              <Card key={lease.id}><CardContent className="space-y-3 p-4">
-                <div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><Checkbox checked={selectedIds.has(lease.id)} onCheckedChange={() => toggleSelected(lease.id)} aria-label={tc('selected')} /><div className="min-w-0"><p className="truncate font-semibold">{isAr && lease.tenant.nameAr ? lease.tenant.nameAr : lease.tenant.name}</p><p className="truncate text-xs text-muted-foreground">{lease.unit.unitNumber} · {isAr && lease.unit.property.nameAr ? lease.unit.property.nameAr : lease.unit.property.name}</p></div></div><Badge className={STATUS_COLORS[lease.status] || DEFAULT_STATUS_COLOR}>{statusLabel(lease.status)}</Badge></div>
-                <div className="grid grid-cols-2 gap-2 text-sm"><div><span className="text-muted-foreground">{t('rentAmount')}</span><p className="font-medium">{formatCurrency(lease.rentAmount)}</p></div><div><span className="text-muted-foreground">{t('endDate')}</span><p>{formatDate(lease.endDate)}</p></div></div>
-                <div className="flex items-center justify-between border-t pt-2"><span className="text-xs text-muted-foreground">{lease._count.payments} {tc('results').toLowerCase()}</span><div className="flex gap-1"><Button variant="ghost" size="icon" aria-label={tc('edit')} onClick={() => openEdit(lease)}><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="text-destructive" aria-label={tc('delete')} onClick={() => setDeleteId(lease.id)}><Trash2 className="h-4 w-4" /></Button></div></div>
-              </CardContent></Card>
-            ))}
-          </div>
-
-          <div className="hidden overflow-x-auto rounded-lg border md:block">
-            <Table><TableHeader><TableRow className="bg-muted/50"><TableHead className="w-10"><Checkbox checked={selectedIds.size === leases.length} onCheckedChange={(checked) => checked ? selectAll() : clearSelection()} aria-label={tc('selectAll')} /></TableHead><TableHead>{t('tenant')}</TableHead><TableHead>{t('unitProperty')}</TableHead><TableHead>{t('startDate')}</TableHead><TableHead>{t('endDate')}</TableHead><TableHead>{t('rentAmount')}</TableHead><TableHead>{t('deposit')}</TableHead><TableHead>{t('status')}</TableHead><TableHead>{tc('details')}</TableHead><TableHead className="w-20">{tc('actions')}</TableHead></TableRow></TableHeader>
-              <TableBody>{leases.map((lease) => <TableRow key={lease.id} className={selectedIds.has(lease.id) ? 'bg-primary/5' : ''}><TableCell><Checkbox checked={selectedIds.has(lease.id)} onCheckedChange={() => toggleSelected(lease.id)} aria-label={tc('selected')} /></TableCell><TableCell className="font-medium">{isAr && lease.tenant.nameAr ? lease.tenant.nameAr : lease.tenant.name}</TableCell><TableCell>{lease.unit.unitNumber} · {isAr && lease.unit.property.nameAr ? lease.unit.property.nameAr : lease.unit.property.name}</TableCell><TableCell>{formatDate(lease.startDate)}</TableCell><TableCell>{formatDate(lease.endDate)}</TableCell><TableCell>{formatCurrency(lease.rentAmount)}</TableCell><TableCell>{lease.deposit == null ? '—' : formatCurrency(lease.deposit)}</TableCell><TableCell><Badge className={STATUS_COLORS[lease.status] || DEFAULT_STATUS_COLOR}>{statusLabel(lease.status)}</Badge></TableCell><TableCell><Badge variant="secondary">{lease._count.payments}</Badge></TableCell><TableCell><div className="flex gap-1"><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" aria-label={tc('edit')} onClick={() => openEdit(lease)}><Pencil className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>{tc('edit')}</TooltipContent></Tooltip><Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="text-destructive" aria-label={tc('delete')} onClick={() => setDeleteId(lease.id)}><Trash2 className="h-4 w-4" /></Button></TooltipTrigger><TooltipContent>{tc('delete')}</TooltipContent></Tooltip></div></TableCell></TableRow>)}</TableBody>
-            </Table>
-          </div>
-
-          {pagination.totalPages > 1 && <div className="flex items-center justify-between gap-3"><p className="text-sm text-muted-foreground">{tc('showing')} {leases.length} {tc('of')} {pagination.total}</p><div className="flex gap-2"><Button variant="outline" size="sm" disabled={pagination.page <= 1} onClick={() => void loadLeases(pagination.page - 1)}>{tc('previous')}</Button><Button variant="outline" size="sm" disabled={pagination.page >= pagination.totalPages} onClick={() => void loadLeases(pagination.page + 1)}>{tc('next')}</Button></div></div>}
-        </>
-      )}
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto"><DialogHeader><DialogTitle>{editingId ? t('editLease') : t('addLease')}</DialogTitle></DialogHeader><div className="grid gap-4 py-2">
-          <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>{t('tenant')}</Label><Select value={form.tenantId} onValueChange={(value) => setForm((current) => ({ ...current, tenantId: value }))}><SelectTrigger><SelectValue placeholder={t('selectTenant')} /></SelectTrigger><SelectContent>{tenantOptions.map((tenant) => <SelectItem key={tenant.id} value={tenant.id}>{isAr && tenant.nameAr ? tenant.nameAr : tenant.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{t('unit')}</Label><Select value={form.unitId} onValueChange={(value) => setForm((current) => ({ ...current, unitId: value }))}><SelectTrigger><SelectValue placeholder={t('selectUnit')} /></SelectTrigger><SelectContent>{selectableUnits.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.unitNumber} · {isAr && unit.property.nameAr ? unit.property.nameAr : unit.property.name}</SelectItem>)}</SelectContent></Select></div></div>
-          <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>{t('startDate')}</Label><Input type="date" value={form.startDate} onChange={(event) => setForm((current) => ({ ...current, startDate: event.target.value }))} /></div><div className="space-y-2"><Label>{t('endDate')}</Label><Input type="date" value={form.endDate} onChange={(event) => setForm((current) => ({ ...current, endDate: event.target.value }))} /></div></div>
-          <div className="grid gap-4 sm:grid-cols-3"><div className="space-y-2"><Label>{t('rentAmount')}</Label><Input type="number" min="0" step="0.01" value={form.rentAmount} onChange={(event) => setForm((current) => ({ ...current, rentAmount: event.target.value }))} /></div><div className="space-y-2"><Label>{t('deposit')}</Label><Input type="number" min="0" step="0.01" value={form.deposit} onChange={(event) => setForm((current) => ({ ...current, deposit: event.target.value }))} /></div><div className="space-y-2"><Label>{t('status')}</Label><Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">{t('active')}</SelectItem><SelectItem value="expired">{t('expired')}</SelectItem><SelectItem value="terminated">{t('terminated')}</SelectItem></SelectContent></Select></div></div>
-        </div><DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>{tc('cancel')}</Button><Button onClick={() => void handleSubmit()} disabled={submitting || !form.unitId || !form.tenantId || !form.startDate || !form.endDate || !form.rentAmount}>{submitting ? tc('loading') : tc('save')}</Button></DialogFooter></DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(deleteId)} onOpenChange={(open) => !open && setDeleteId(null)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>{tc('confirmDeleteTitle')}</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">{t('confirmDelete')}</p><DialogFooter><Button variant="outline" onClick={() => setDeleteId(null)}>{tc('cancel')}</Button><Button variant="destructive" onClick={() => void deleteLease()}>{tc('delete')}</Button></DialogFooter></DialogContent></Dialog>
-      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>{tc('confirmDeleteTitle')}</DialogTitle></DialogHeader><p className="text-sm text-muted-foreground">{tc('confirmBulkDelete', { count: selectedIds.size })}</p><DialogFooter><Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>{tc('cancel')}</Button><Button variant="destructive" onClick={() => void bulkDelete()}>{tc('delete')}</Button></DialogFooter></DialogContent></Dialog>
-
-      <BulkActionsBar
-        selectedCount={selectedIds.size}
-        totalCount={leases.length}
-        onSelectAll={selectAll}
-        onClearSelection={clearSelection}
-        onDelete={() => setBulkDeleteOpen(true)}
-        onExport={() => exportRows(leases.filter((lease) => selectedIds.has(lease.id)), 'leases-selected.csv')}
-        onChangeStatus={<DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs"><ChevronDown className="h-3.5 w-3.5" />{tc('changeStatus')}</Button></DropdownMenuTrigger><DropdownMenuContent><DropdownMenuItem onClick={() => void bulkStatus('active')}>{t('active')}</DropdownMenuItem><DropdownMenuItem onClick={() => void bulkStatus('expired')}>{t('expired')}</DropdownMenuItem><DropdownMenuItem onClick={() => void bulkStatus('terminated')}>{t('terminated')}</DropdownMenuItem></DropdownMenuContent></DropdownMenu>}
-      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h1 className="text-2xl font-semibold">{copy.title}</h1><p className="text-sm text-muted-foreground">{pagination.total} {copy.title.toLowerCase()}</p></div><div className="flex gap-2"><Button variant="outline" onClick={exportCsv} disabled={!leases.length}><Download className="me-2 h-4 w-4" />{copy.export}</Button>{writable && <Button onClick={openAdd}><Plus className="me-2 h-4 w-4" />{copy.add}</Button>}</div></div>
+      {!writable && <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">{copy.readOnly}</div>}
+      <div className="grid gap-3 sm:grid-cols-3">{[[copy.activeLeases, stats.activeLeases, false], [copy.expiring, stats.expiringSoon, false], [copy.revenue, stats.totalMonthlyRevenue, true]].map(([label, value, currency]) => <Card key={String(label)}><CardContent className="p-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-semibold">{currency ? money.format(Number(value)) : Number(value).toLocaleString(isAr ? 'ar-IQ' : 'en-US')}</p></CardContent></Card>)}</div>
+      <Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-full sm:w-52"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{copy.all}</SelectItem>{['active','expired','terminated'].map((status) => <SelectItem key={status} value={status}>{statusLabel(status)}</SelectItem>)}</SelectContent></Select>
+      {loading ? <div className="space-y-3">{[1,2,3,4].map((item) => <Skeleton key={item} className="h-16 w-full" />)}</div> : !leases.length ? <EmptyState icon={FileText} title={copy.title} description={copy.noData} actionLabel={writable ? copy.add : undefined} onAction={writable ? openAdd : undefined} /> : <><div className="grid gap-3 md:hidden">{leases.map((lease) => <Card key={lease.id}><CardContent className="space-y-3 p-4"><div className="flex items-start justify-between"><div><p className="font-medium">{name(lease.tenant)}</p><p className="text-xs text-muted-foreground">{lease.unit.unitNumber} · {name(lease.unit.property)}</p></div><Badge className={STATUS_COLORS[lease.status] || DEFAULT_STATUS_COLOR}>{statusLabel(lease.status)}</Badge></div><div className="grid grid-cols-2 gap-2 text-sm"><div><p className="text-xs text-muted-foreground">{copy.start}</p><p>{date(lease.startDate)}</p></div><div><p className="text-xs text-muted-foreground">{copy.end}</p><p>{date(lease.endDate)}</p></div><div><p className="text-xs text-muted-foreground">{copy.rent}</p><p className="font-semibold">{money.format(lease.rentAmount)}</p></div><div><p className="text-xs text-muted-foreground">{copy.payments}</p><p>{lease._count.payments}</p></div></div>{writable && <div className="flex justify-end"><Button variant="ghost" size="sm" onClick={() => openEdit(lease)}><Pencil className="me-2 h-4 w-4" />{copy.edit}</Button></div>}</CardContent></Card>)}</div><div className="hidden overflow-x-auto rounded-lg border md:block"><Table><TableHeader><TableRow><TableHead>{copy.tenant}</TableHead><TableHead>{copy.unit}</TableHead><TableHead>{copy.start}</TableHead><TableHead>{copy.end}</TableHead><TableHead>{copy.rent}</TableHead><TableHead>{copy.deposit}</TableHead><TableHead>{copy.status}</TableHead><TableHead>{copy.payments}</TableHead>{writable && <TableHead className="text-end">{copy.actions}</TableHead>}</TableRow></TableHeader><TableBody>{leases.map((lease) => <TableRow key={lease.id}><TableCell className="font-medium">{name(lease.tenant)}</TableCell><TableCell>{lease.unit.unitNumber} · {name(lease.unit.property)}</TableCell><TableCell>{date(lease.startDate)}</TableCell><TableCell>{date(lease.endDate)}</TableCell><TableCell>{money.format(lease.rentAmount)}</TableCell><TableCell>{lease.deposit == null ? '—' : money.format(lease.deposit)}</TableCell><TableCell><Badge className={STATUS_COLORS[lease.status] || DEFAULT_STATUS_COLOR}>{statusLabel(lease.status)}</Badge></TableCell><TableCell>{lease._count.payments}</TableCell>{writable && <TableCell className="text-end"><Button variant="ghost" size="icon" aria-label={copy.edit} onClick={() => openEdit(lease)}><Pencil className="h-4 w-4" /></Button></TableCell>}</TableRow>)}</TableBody></Table></div><div className="flex items-center justify-between"><Button variant="outline" disabled={pagination.page <= 1} onClick={() => load(pagination.page - 1)}>{copy.previous}</Button><span className="text-sm text-muted-foreground">{pagination.page} / {Math.max(1, pagination.totalPages)}</span><Button variant="outline" disabled={pagination.page >= pagination.totalPages} onClick={() => load(pagination.page + 1)}>{copy.next}</Button></div></>}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>{editingId ? copy.edit : copy.add}</DialogTitle></DialogHeader><form onSubmit={submit} className="space-y-4"><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>{copy.tenant}</Label><Select value={form.tenantId} disabled={Boolean(editingId)} onValueChange={(tenantId) => setForm({ ...form, tenantId })}><SelectTrigger><SelectValue placeholder={copy.selectTenant} /></SelectTrigger><SelectContent>{tenants.map((tenant) => <SelectItem key={tenant.id} value={tenant.id}>{name(tenant)}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{copy.unit}</Label><Select value={form.unitId} disabled={Boolean(editingId)} onValueChange={(unitId) => { const unit = units.find((item) => item.id === unitId); setForm({ ...form, unitId, rentAmount: unit ? String(unit.rentAmount) : form.rentAmount }); }}><SelectTrigger><SelectValue placeholder={copy.selectUnit} /></SelectTrigger><SelectContent>{availableUnits.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.unitNumber} · {name(unit.property)}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>{copy.start}</Label><Input type="date" value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} required /></div><div className="space-y-2"><Label>{copy.end}</Label><Input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} required /></div><div className="space-y-2"><Label>{copy.rent}</Label><Input type="number" min="0.01" step="0.01" value={form.rentAmount} onChange={(e) => setForm({ ...form, rentAmount: e.target.value })} required /></div><div className="space-y-2"><Label>{copy.deposit}</Label><Input type="number" min="0" step="0.01" value={form.deposit} onChange={(e) => setForm({ ...form, deposit: e.target.value })} /></div>{editingId && <div className="space-y-2 sm:col-span-2"><Label>{copy.status}</Label><Select value={form.status} onValueChange={(status) => setForm({ ...form, status })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['active','expired','terminated'].map((status) => <SelectItem key={status} value={status}>{statusLabel(status)}</SelectItem>)}</SelectContent></Select></div>}</div><DialogFooter><Button type="button" variant="outline" onClick={() => setFormOpen(false)}>{copy.cancel}</Button><Button disabled={saving || !form.unitId || !form.tenantId || !form.startDate || !form.endDate || !form.rentAmount}>{saving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}{copy.save}</Button></DialogFooter></form></DialogContent></Dialog>
     </div>
   );
 }

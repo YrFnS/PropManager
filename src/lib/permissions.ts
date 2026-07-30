@@ -1,18 +1,8 @@
 import type { AppRole } from '@/lib/auth';
 
 export type AppResource =
-  | 'dashboard'
-  | 'properties'
-  | 'units'
-  | 'tenants'
-  | 'leases'
-  | 'payments'
-  | 'maintenance'
-  | 'messages'
-  | 'reports'
-  | 'settings'
-  | 'organization'
-  | 'users';
+  | 'dashboard' | 'properties' | 'units' | 'tenants' | 'leases' | 'payments'
+  | 'maintenance' | 'messages' | 'reports' | 'settings' | 'organization' | 'users';
 
 const WRITE_RESOURCES: Record<AppRole, readonly AppResource[]> = {
   owner: ['properties', 'units', 'tenants', 'leases', 'payments', 'maintenance', 'messages', 'settings', 'organization', 'users'],
