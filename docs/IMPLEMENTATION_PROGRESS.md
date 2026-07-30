@@ -14,6 +14,7 @@ The stabilization branch is being completed in validated phases.
 - Payment lifecycle tests and validation
 - Role-aware finance screens and global quick actions
 - Server-hydrated permission context with organization switching preserved
+- Architecture safeguards for tenancy, roles, and immutable finance
 
 ## In progress
 
