@@ -82,7 +82,7 @@ jobs:
               '20260729_decimal_money': '20260729_0003_decimal_money',
               '20260729_payment_lifecycle': '20260729_0004_payment_lifecycle',
           }
-          excluded = {'.git', 'node_modules', '.next'}
+          excluded = {'.git', '.github', 'node_modules', '.next'}
           for path in Path('.').rglob('*'):
               if not path.is_file() or any(part in excluded for part in path.parts):
                   continue
@@ -137,13 +137,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rm -rf test-results playwright-report
           rm -f .rehearsal-publish-ready
-          rm -f .github/workflows/bootstrap-rehearsal.yml
-          rm -f .github/workflows/publish-rehearsal.yml
           git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
+          git reset -- .github/workflows
+          git restore .github/workflows
           git diff --cached --check
           git commit -m "test: validate migration order and browser permissions"
           git push origin HEAD:agent/stabilize-core-workflows
