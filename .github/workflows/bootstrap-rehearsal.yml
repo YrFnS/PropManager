@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: bootstrap-browser-rehearsal
@@ -44,6 +46,7 @@ jobs:
       DEFAULT_TIMEZONE: UTC
       ENABLE_AI_COPILOT: "false"
       CI: "true"
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -101,15 +104,24 @@ jobs:
           git diff --check
       - name: Install and lock Playwright
         run: bun add --dev @playwright/test@latest
-      - run: bun ci
-      - run: bun run db:generate
-      - run: bash scripts/rehearse-migrations.sh
-      - run: bun run typecheck
-      - run: bun test tests
-      - run: bun run lint
-      - run: bun run build
-      - run: bunx playwright install --with-deps chromium
-      - run: bun run test:e2e
+      - name: Verify frozen dependency graph
+        run: bun ci
+      - name: Generate Prisma client
+        run: bun run db:generate
+      - name: Rehearse fresh and legacy migrations
+        run: bash scripts/rehearse-migrations.sh
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Unit tests
+        run: bun test tests
+      - name: Lint
+        run: bun run lint
+      - name: Production build
+        run: bun run build
+      - name: Install Chromium
+        run: bunx playwright install --with-deps chromium
+      - name: Browser smoke tests
+        run: bun run test:e2e
       - name: Publish validated rehearsal layer
         shell: bash
         run: |
@@ -122,3 +134,13 @@ jobs:
           git diff --cached --check
           git commit -m "test: add browser and migration rehearsal"
           git push origin HEAD:agent/stabilize-core-workflows
+      - name: Report bootstrap failure
+        if: failure()
+        shell: bash
+        run: |
+          gh pr comment 1 --repo YrFnS/PropManager --body "The browser/migration bootstrap failed. Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+      - name: Report bootstrap success
+        if: success()
+        shell: bash
+        run: |
+          gh pr comment 1 --repo YrFnS/PropManager --body "Fresh and legacy migrations, unit checks, production build, and Chromium smoke tests all passed. The rehearsal layer was published."
