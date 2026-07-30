@@ -15,6 +15,7 @@ The stabilization branch is being completed in validated phases.
 - Immutable payment void and refund adjustments
 - Net-cash reporting after refunds
 - Automated validation of the accounting phase
+- Retrying the accounting phase with a heredoc-safe executor
 
 ## Next
 
