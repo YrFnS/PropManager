@@ -15,13 +15,14 @@ The stabilization branch is being completed in validated phases.
 - Role-aware finance screens and global quick actions
 - Server-hydrated permission context with organization switching preserved
 - Architecture safeguards for tenancy, roles, and immutable finance
+- Role-aware mutation visibility across Properties, Units, Tenants, Maintenance, and Messages
 
 ## In progress
 
-- Role-aware mutation visibility across Properties, Units, Tenants, Maintenance, and Messages
-- Validating strict mutation-control tagging before publication
+- Fresh-install and legacy-upgrade migration rehearsal
+- Chromium smoke tests for login and role enforcement
 
 ## Next
 
-- Add browser smoke tests and migration rehearsal
 - Remove temporary phase automation before review
+- Refresh the draft PR summary and final validation status
