@@ -1,0 +1,64 @@
+name: Browser and migration rehearsal
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rehearsal-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: propmanager
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d propmanager"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propmanager?schema=public
+      LEGACY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propmanager_legacy?schema=public
+      LEGACY_PSQL_URL: postgresql://postgres:postgres@localhost:5432/propmanager_legacy
+      AUTH_SECRET: rehearsal-auth-secret-with-more-than-thirty-two-characters
+      ADMIN_EMAIL: owner@example.com
+      ADMIN_PASSWORD: OwnerPassword123!
+      ADMIN_NAME: Rehearsal Owner
+      DEFAULT_ORGANIZATION_NAME: Rehearsal Properties
+      DEFAULT_CURRENCY: USD
+      DEFAULT_TIMEZONE: UTC
+      ENABLE_AI_COPILOT: "false"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun ci
+      - run: bun run db:generate
+      - run: bash scripts/rehearse-migrations.sh
+      - run: bun run typecheck
+      - run: bun test tests
+      - run: bun run lint
+      - run: bun run build
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
