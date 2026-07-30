@@ -2,7 +2,6 @@
 
 import { FormEvent, useState } from 'react';
 import { useLocale } from 'next-intl';
-import { useRouter } from '@/i18n/routing';
 import { Building2, Loader2, LockKeyhole } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -32,7 +31,6 @@ const COPY = {
 
 export default function LoginPage() {
   const locale = useLocale() as 'en' | 'ar';
-  const router = useRouter();
   const copy = COPY[locale] ?? COPY.en;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -61,11 +59,16 @@ export default function LoginPage() {
       const destination = requestedPath && requestedPath.startsWith('/') && !requestedPath.startsWith('//')
         ? requestedPath
         : '/dashboard';
-      router.replace(destination);
-      router.refresh();
+      const localizedDestination = destination === `/${locale}` || destination.startsWith(`/${locale}/`)
+        ? destination
+        : `/${locale}${destination === '/' ? '' : destination}`;
+
+      // Authentication changes the server-rendered layout session. A full
+      // navigation prevents the previous unauthenticated layout state from
+      // surviving a client-side route transition.
+      window.location.assign(localizedDestination);
     } catch {
       setError(copy.genericError);
-    } finally {
       setSubmitting(false);
     }
   };
