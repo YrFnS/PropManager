@@ -172,14 +172,12 @@ export default function PropertiesSection() {
     onRecord: openDetailSheet,
   });
 
-  if (loading) return <div className="grid gap-4 md:grid-cols-3">{[1,2,3].map(i => <Card key={i} className="animate-pulse"><CardContent className="p-6"><div className="h-32 bg-muted rounded" /></CardContent></Card>)}</div>;
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="properties-page">
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold gradient-text">{t('title')}</h1>
-          {data.length > 0 && <Badge variant="secondary">{data.length}</Badge>}
+          {!loading && data.length > 0 && <Badge variant="secondary">{data.length}</Badge>}
         </div>
         <Button data-pm-write-resource="properties" onClick={openAddDialog}><Plus className="h-4 w-4 me-2" />{t('addProperty')}</Button>
       </div>
@@ -189,7 +187,15 @@ export default function PropertiesSection() {
         <Select value={typeFilter} onValueChange={setTypeFilter}><SelectTrigger className="w-full sm:w-40"><SelectValue placeholder={tc('all')} /></SelectTrigger><SelectContent><SelectItem value="all">{tc('all')}</SelectItem><SelectItem value="residential">{t('residential')}</SelectItem><SelectItem value="commercial">{t('commercial')}</SelectItem><SelectItem value="mixed">{t('mixed')}</SelectItem></SelectContent></Select>
       </div>
 
-      {data.length === 0 ? (
+      {loading ? (
+        <div className="grid gap-4 md:grid-cols-3" aria-label={tc('loading')}>
+          {[1, 2, 3].map((item) => (
+            <Card key={item} className="animate-pulse">
+              <CardContent className="p-6"><div className="h-32 rounded bg-muted" /></CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : data.length === 0 ? (
         <EmptyState
           icon={Building2}
           title={t('noProperties')}
