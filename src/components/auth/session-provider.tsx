@@ -2,12 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { AppRole, SessionInput } from '@/lib/auth';
+import { canWriteResource, type AppResource } from '@/lib/permissions';
 
 interface SessionContextValue {
   session: SessionInput | null;
   setSession: (session: SessionInput | null) => void;
   refreshSession: () => Promise<SessionInput | null>;
   hasAnyRole: (...roles: AppRole[]) => boolean;
+  canWrite: (resource: AppResource) => boolean;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -24,10 +26,12 @@ export function SessionProvider({
   useEffect(() => {
     if (!session) {
       delete document.documentElement.dataset.role;
+      delete document.documentElement.dataset.pmRole;
       delete document.documentElement.dataset.organization;
       return;
     }
     document.documentElement.dataset.role = session.role;
+    document.documentElement.dataset.pmRole = session.role;
     document.documentElement.dataset.organization = session.organizationId;
   }, [session]);
 
@@ -47,6 +51,7 @@ export function SessionProvider({
     setSession,
     refreshSession,
     hasAnyRole: (...roles) => Boolean(session && roles.includes(session.role)),
+    canWrite: (resource) => canWriteResource(session?.role, resource),
   }), [session, refreshSession]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
