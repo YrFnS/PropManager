@@ -7,10 +7,12 @@ on:
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: pending-stabilization-phase
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   apply:
@@ -26,6 +28,7 @@ jobs:
       ADMIN_PASSWORD: ci-only-password
       ENABLE_AI_COPILOT: "false"
       COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,8 +37,6 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - name: Load phase executor
-        run: python3 -m pip install --disable-pip-version-check pyyaml
       - name: Execute the selected validated phase
         shell: bash
         run: |
@@ -44,28 +45,65 @@ jobs:
           import os
           import subprocess
           from pathlib import Path
-          import yaml
 
           message = os.environ['COMMIT_MESSAGE']
           phases = {
-              '[apply phase4]': (Path('.github/workflows/phase4-accounting.yml'), 'accounting'),
-              '[apply phase5]': (Path('.github/workflows/phase5-role-ui.yml'), 'role-ui'),
-              '[apply phase7]': (Path('.github/workflows/phase7-role-visibility.yml'), 'visibility'),
+              '[apply phase4]': (Path('.github/workflows/phase4-accounting.yml'), 'accounting', 'immutable payment lifecycle'),
+              '[apply phase5]': (Path('.github/workflows/phase5-role-ui.yml'), 'role-ui', 'role-aware finance UI'),
+              '[apply phase7]': (Path('.github/workflows/phase7-role-visibility.yml'), 'visibility', 'legacy-screen role visibility'),
           }
-          selected = next(((path, job) for marker, (path, job) in phases.items() if marker in message), None)
+          selected = next((value for marker, value in phases.items() if marker in message), None)
           if not selected:
               raise SystemExit('No supported phase marker was found.')
 
-          path, preferred_job = selected
-          document = yaml.safe_load(path.read_text())
-          jobs = document.get('jobs', {})
-          job = jobs.get(preferred_job) or next(iter(jobs.values()))
+          path, job_name, phase_name = selected
+          Path('/tmp/phase-name.txt').write_text(phase_name)
+          lines = path.read_text().splitlines()
+          job_marker = f'  {job_name}:'
+          try:
+              start = lines.index(job_marker) + 1
+          except ValueError as error:
+              raise SystemExit(f'Job {job_name!r} was not found in {path}.') from error
 
-          for step in job.get('steps', []):
-              script = step.get('run')
-              if not script:
-                  continue
-              name = str(step.get('name', 'run'))
+          scripts = []
+          current_name = 'run'
+          index = start
+          while index < len(lines):
+              line = lines[index]
+              if line.startswith('  ') and not line.startswith('    ') and line.rstrip().endswith(':'):
+                  break
+              if line.startswith('      - name:'):
+                  current_name = line.split(':', 1)[1].strip()
+              elif line.startswith('      - run:'):
+                  value = line.split('run:', 1)[1].strip()
+                  if value and value != '|':
+                      scripts.append((current_name, value))
+                      current_name = 'run'
+              elif line.startswith('        run:'):
+                  value = line.split('run:', 1)[1].strip()
+                  if value and value != '|':
+                      scripts.append((current_name, value))
+                      current_name = 'run'
+                  else:
+                      block_indent = len(line) - len(line.lstrip())
+                      raw = []
+                      cursor = index + 1
+                      while cursor < len(lines):
+                          candidate = lines[cursor]
+                          candidate_indent = len(candidate) - len(candidate.lstrip()) if candidate.strip() else block_indent + 2
+                          if candidate.strip() and candidate_indent <= block_indent:
+                              break
+                          raw.append(candidate)
+                          cursor += 1
+                      nonempty_indents = [len(item) - len(item.lstrip()) for item in raw if item.strip()]
+                      content_indent = min(nonempty_indents) if nonempty_indents else block_indent + 2
+                      script = '\n'.join(item[content_indent:] if item.strip() else '' for item in raw)
+                      scripts.append((current_name, script))
+                      current_name = 'run'
+                      index = cursor - 1
+              index += 1
+
+          for name, script in scripts:
               if name.lower().startswith('publish'):
                   continue
               filtered = '\n'.join(
@@ -73,8 +111,23 @@ jobs:
                   if not ('rm -f' in line and '.github/workflows/' in line)
               )
               print(f'::group::{name}')
-              subprocess.run(['bash', '-lc', filtered], check=True, env=os.environ.copy())
+              process = subprocess.run(
+                  ['bash', '-lc', filtered],
+                  text=True,
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.STDOUT,
+                  env=os.environ.copy(),
+              )
+              print(process.stdout, end='')
               print('::endgroup::')
+              if process.returncode:
+                  tail = '\n'.join(process.stdout.splitlines()[-120:])
+                  Path('/tmp/phase-failure.md').write_text(
+                      f'### Pending stabilization phase failed\n\n'
+                      f'Phase: **{phase_name}**  \nStep: **{name}**\n\n'
+                      f'```text\n{tail}\n```\n'
+                  )
+                  raise SystemExit(process.returncode)
           PY
           git diff --check
       - name: Publish the validated phase
@@ -89,5 +142,21 @@ jobs:
             echo "The selected phase made no changes."
             exit 0
           fi
-          git commit -m "feat: apply the next validated stabilization phase"
+          phase_name="$(cat /tmp/phase-name.txt)"
+          git commit -m "feat: apply ${phase_name}"
           git push origin HEAD:agent/stabilize-core-workflows
+      - name: Report failure on the draft PR
+        if: failure()
+        shell: bash
+        run: |
+          if [ -f /tmp/phase-failure.md ]; then
+            gh pr comment 1 --repo YrFnS/PropManager --body-file /tmp/phase-failure.md
+          else
+            gh pr comment 1 --repo YrFnS/PropManager --body "A pending stabilization phase failed before it could produce a detailed diagnostic."
+          fi
+      - name: Report successful publication
+        if: success()
+        shell: bash
+        run: |
+          phase_name="$(cat /tmp/phase-name.txt)"
+          gh pr comment 1 --repo YrFnS/PropManager --body "Published and validated the **${phase_name}** phase. The normal CI workflow will now verify the committed result."
