@@ -27,6 +27,7 @@ model Organization {
   maintenanceRequests MaintenanceRequest[]
   messages            Message[]
   activityLogs        ActivityLog[]
+  paymentAdjustments  PaymentAdjustment[]
 }
 
 model User {
@@ -181,11 +182,29 @@ model Payment {
   notes          String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  adjustments    PaymentAdjustment[]
 
   @@index([organizationId, status])
   @@index([leaseId])
   @@index([tenantId])
   @@index([dueDate])
+}
+
+
+model PaymentAdjustment {
+id              String       @id @default(cuid())
+organizationId  String       @default("org_default")
+organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+paymentId       String
+payment         Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+type            String
+amount          Decimal      @default(0) @db.Decimal(18, 2)
+reason          String
+createdByUserId String?
+createdAt       DateTime     @default(now())
+
+@@index([organizationId, paymentId])
+@@index([organizationId, type, createdAt])
 }
 
 model MaintenanceRequest {
