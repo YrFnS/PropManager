@@ -19,6 +19,7 @@ The stabilization branch is being completed in validated phases.
 
 ## In progress
 
+- Reordering migrations into their true dependency sequence
 - Fresh-install and legacy-upgrade migration rehearsal
 - Chromium smoke tests for login and role enforcement
 
