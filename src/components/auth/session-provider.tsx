@@ -24,15 +24,16 @@ export function SessionProvider({
   const [session, setSession] = useState<SessionInput | null>(initialSession);
 
   useEffect(() => {
+    const data = document.documentElement.dataset;
     if (!session) {
-      delete document.documentElement.dataset.role;
-      delete document.documentElement.dataset.pmRole;
-      delete document.documentElement.dataset.organization;
+      delete data.role;
+      delete data.pmRole;
+      delete data.organization;
       return;
     }
-    document.documentElement.dataset.role = session.role;
-    document.documentElement.dataset.pmRole = session.role;
-    document.documentElement.dataset.organization = session.organizationId;
+    data.role = session.role;
+    data.pmRole = session.role;
+    data.organization = session.organizationId;
   }, [session]);
 
   const refreshSession = useCallback(async () => {
