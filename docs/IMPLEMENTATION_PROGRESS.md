@@ -16,6 +16,7 @@ The stabilization branch is being completed in validated phases.
 ## In progress
 
 - Role-aware finance screens and global quick actions
+- Preserving server-hydrated sessions and organization switching while adding UI permissions
 
 ## Next
 
