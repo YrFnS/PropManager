@@ -1,0 +1,93 @@
+name: Apply validated pending stabilization phase
+
+on:
+  push:
+    branches:
+      - agent/stabilize-core-workflows
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pending-stabilization-phase
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: >-
+      contains(github.event.head_commit.message, '[apply phase4]') ||
+      contains(github.event.head_commit.message, '[apply phase5]') ||
+      contains(github.event.head_commit.message, '[apply phase7]')
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/propmanager?schema=public
+      AUTH_SECRET: ci-only-auth-secret-with-more-than-thirty-two-characters
+      ADMIN_EMAIL: ci@example.com
+      ADMIN_PASSWORD: ci-only-password
+      ENABLE_AI_COPILOT: "false"
+      COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/stabilize-core-workflows
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Load phase executor
+        run: python3 -m pip install --disable-pip-version-check pyyaml
+      - name: Execute the selected validated phase
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+          import yaml
+
+          message = os.environ['COMMIT_MESSAGE']
+          phases = {
+              '[apply phase4]': (Path('.github/workflows/phase4-accounting.yml'), 'accounting'),
+              '[apply phase5]': (Path('.github/workflows/phase5-role-ui.yml'), 'role-ui'),
+              '[apply phase7]': (Path('.github/workflows/phase7-role-visibility.yml'), 'visibility'),
+          }
+          selected = next(((path, job) for marker, (path, job) in phases.items() if marker in message), None)
+          if not selected:
+              raise SystemExit('No supported phase marker was found.')
+
+          path, preferred_job = selected
+          document = yaml.safe_load(path.read_text())
+          jobs = document.get('jobs', {})
+          job = jobs.get(preferred_job) or next(iter(jobs.values()))
+
+          for step in job.get('steps', []):
+              script = step.get('run')
+              if not script:
+                  continue
+              name = str(step.get('name', 'run'))
+              if name.lower().startswith('publish'):
+                  continue
+              filtered = '\n'.join(
+                  line for line in script.splitlines()
+                  if not ('rm -f' in line and '.github/workflows/' in line)
+              )
+              print(f'::group::{name}')
+              subprocess.run(['bash', '-lc', filtered], check=True, env=os.environ.copy())
+              print('::endgroup::')
+          PY
+          git diff --check
+      - name: Publish the validated phase
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo "The selected phase made no changes."
+            exit 0
+          fi
+          git commit -m "feat: apply the next validated stabilization phase"
+          git push origin HEAD:agent/stabilize-core-workflows
