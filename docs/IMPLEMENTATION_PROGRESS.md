@@ -19,7 +19,7 @@ The stabilization branch is being completed in validated phases.
 ## In progress
 
 - Role-aware mutation visibility across Properties, Units, Tenants, Maintenance, and Messages
-- Retrying the visibility pass from the green architecture baseline
+- Validating strict mutation-control tagging before publication
 
 ## Next
 
