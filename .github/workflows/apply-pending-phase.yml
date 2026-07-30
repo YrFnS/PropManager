@@ -86,18 +86,21 @@ jobs:
                       current_name = 'run'
                   else:
                       block_indent = len(line) - len(line.lstrip())
+                      content_prefix = ' ' * (block_indent + 2)
                       raw = []
                       cursor = index + 1
                       while cursor < len(lines):
                           candidate = lines[cursor]
-                          candidate_indent = len(candidate) - len(candidate.lstrip()) if candidate.strip() else block_indent + 2
-                          if candidate.strip() and candidate_indent <= block_indent:
+                          if candidate.startswith('      - '):
+                              break
+                          if candidate.startswith('  ') and not candidate.startswith('    ') and candidate.rstrip().endswith(':'):
                               break
                           raw.append(candidate)
                           cursor += 1
-                      nonempty_indents = [len(item) - len(item.lstrip()) for item in raw if item.strip()]
-                      content_indent = min(nonempty_indents) if nonempty_indents else block_indent + 2
-                      script = '\n'.join(item[content_indent:] if item.strip() else '' for item in raw)
+                      script = '\n'.join(
+                          item[len(content_prefix):] if item.startswith(content_prefix) else item.lstrip()
+                          for item in raw
+                      )
                       scripts.append((current_name, script))
                       current_name = 'run'
                       index = cursor - 1
