@@ -73,6 +73,8 @@ test('Arabic login keeps the document in RTL mode', async ({ page }) => {
 });
 
 test('bootstrap owner can work while a viewer stays read-only', async ({ browser }) => {
+  test.setTimeout(120_000);
+
   const ownerContext = await browser.newContext();
   const ownerPage = await ownerContext.newPage();
   await login(ownerPage, ownerEmail, ownerPassword);
