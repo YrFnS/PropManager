@@ -7,6 +7,7 @@ const viewerPassword = 'ViewerPassword123!';
 
 async function login(page: Page, email: string, password: string) {
   await page.goto('/en/login', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('form[data-hydrated="true"]')).toBeVisible({ timeout: 60_000 });
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await Promise.all([
