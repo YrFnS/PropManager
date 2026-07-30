@@ -181,7 +181,7 @@ export default function PropertiesSection() {
           <h1 className="text-2xl font-bold gradient-text">{t('title')}</h1>
           {data.length > 0 && <Badge variant="secondary">{data.length}</Badge>}
         </div>
-        <Button onClick={openAddDialog}><Plus className="h-4 w-4 me-2" />{t('addProperty')}</Button>
+        <Button data-pm-write-resource="properties" onClick={openAddDialog}><Plus className="h-4 w-4 me-2" />{t('addProperty')}</Button>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -221,7 +221,7 @@ export default function PropertiesSection() {
                   <Badge variant={p.type === 'commercial' ? 'default' : 'secondary'}>{t(p.type)}</Badge>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEditDialog(p); }}>
+                      <Button data-pm-write-resource="properties" variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEditDialog(p); }}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                     </TooltipTrigger>
@@ -229,7 +229,7 @@ export default function PropertiesSection() {
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}>
+                      <Button data-pm-write-resource="properties" variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(p); }}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </TooltipTrigger>
@@ -297,7 +297,7 @@ export default function PropertiesSection() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>{tc('cancel')}</Button>
-            <Button onClick={handleSubmit} disabled={submitting}>{submitting ? tc('loading') : tc('save')}</Button>
+            <Button data-pm-write-resource="properties" onClick={handleSubmit} disabled={submitting}>{submitting ? tc('loading') : tc('save')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -320,7 +320,7 @@ export default function PropertiesSection() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{tc('cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction data-pm-write-resource="properties" onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {tc('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>

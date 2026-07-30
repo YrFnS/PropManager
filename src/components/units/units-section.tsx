@@ -339,7 +339,7 @@ export default function UnitsSection() {
           <h1 className="text-2xl font-bold tracking-tight gradient-text">{t('title')}</h1>
           {units.length > 0 && <Badge variant="secondary">{units.length}</Badge>}
         </div>
-        <Button onClick={openAddDialog}><Plus className="h-4 w-4 me-2" />{t('addUnit')}</Button>
+        <Button data-pm-write-resource="units" onClick={openAddDialog}><Plus className="h-4 w-4 me-2" />{t('addUnit')}</Button>
       </div>
 
       {/* Unit Detail Sheet */}
@@ -413,7 +413,7 @@ export default function UnitsSection() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>{tc('cancel')}</Button>
-            <Button onClick={handleSubmit} disabled={submitting || !form.unitNumber || !form.propertyId || !form.rentAmount}>
+            <Button data-pm-write-resource="units" onClick={handleSubmit} disabled={submitting || !form.unitNumber || !form.propertyId || !form.rentAmount}>
               {submitting ? tc('loading') : tc('save')}
             </Button>
           </DialogFooter>
@@ -513,7 +513,7 @@ export default function UnitsSection() {
               <CardContent className="p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Checkbox
+                    <Checkbox data-pm-write-resource="units"
                       checked={selectedIds.has(u.id)}
                       onCheckedChange={() => toggleSelect(u.id)}
                       onClick={(e) => e.stopPropagation()}
@@ -525,7 +525,7 @@ export default function UnitsSection() {
                     <Badge className={getStatusBadge(u.status)}>{getStatusLabel(u.status)}</Badge>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEditDialog(u); }}>
+                        <Button data-pm-write-resource="units" variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEditDialog(u); }}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       </TooltipTrigger>
@@ -533,7 +533,7 @@ export default function UnitsSection() {
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(u); }}>
+                        <Button data-pm-write-resource="units" variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(u); }}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </TooltipTrigger>
@@ -567,7 +567,7 @@ export default function UnitsSection() {
             <TableHeader>
               <TableRow className="bg-muted/50 backdrop-blur-sm sticky top-0">
                 <TableHead className="w-[40px]">
-                  <Checkbox
+                  <Checkbox data-pm-write-resource="units"
                     checked={selectedIds.size === units.length && units.length > 0}
                     onCheckedChange={(checked) => { if (checked) selectAll(); else clearSelection(); }}
                   />
@@ -592,7 +592,7 @@ export default function UnitsSection() {
                   onClick={() => handleUnitClick(u)}
                 >
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
+                    <Checkbox data-pm-write-resource="units"
                       checked={selectedIds.has(u.id)}
                       onCheckedChange={() => toggleSelect(u.id)}
                     />
@@ -614,7 +614,7 @@ export default function UnitsSection() {
                     <div className="flex items-center gap-0.5">
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEditDialog(u); }}>
+                          <Button data-pm-write-resource="units" variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEditDialog(u); }}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
                         </TooltipTrigger>
@@ -622,7 +622,7 @@ export default function UnitsSection() {
                       </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(u); }}>
+                          <Button data-pm-write-resource="units" variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(u); }}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </TooltipTrigger>
@@ -656,7 +656,7 @@ export default function UnitsSection() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{tc('cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction data-pm-write-resource="units" onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {tc('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -674,7 +674,7 @@ export default function UnitsSection() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{tc('cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction data-pm-write-resource="units" onClick={handleBulkDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {tc('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>

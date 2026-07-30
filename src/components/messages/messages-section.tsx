@@ -216,11 +216,11 @@ export default function MessagesSection() {
         </div>
         <div className="flex items-center gap-2">
           {unreadCount > 0 && (
-            <Button variant="outline" onClick={handleMarkAllRead}>
+            <Button data-pm-write-resource="messages" variant="outline" onClick={handleMarkAllRead}>
               <CheckCheck className="h-4 w-4 me-2" />{t('markAllRead')}
             </Button>
           )}
-          <Button onClick={handleOpenAdd}><Plus className="h-4 w-4 me-2" />{t('newMessage')}</Button>
+          <Button data-pm-write-resource="messages" onClick={handleOpenAdd}><Plus className="h-4 w-4 me-2" />{t('newMessage')}</Button>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -262,7 +262,7 @@ export default function MessagesSection() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>{tc('cancel')}</Button>
-              <Button onClick={handleSubmit} disabled={submitting || !form.senderName || !form.subject || !form.content}>
+              <Button data-pm-write-resource="messages" onClick={handleSubmit} disabled={submitting || !form.senderName || !form.subject || !form.content}>
                 {submitting ? tc('loading') : tc('save')}
               </Button>
             </DialogFooter>
@@ -279,7 +279,7 @@ export default function MessagesSection() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{tc('cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction data-pm-write-resource="messages" onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {tc('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -366,14 +366,14 @@ export default function MessagesSection() {
                       <div className="mt-3 space-y-3">
                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                         <div className="flex items-center gap-2">
-                          <Button
+                          <Button data-pm-write-resource="messages"
                             variant="outline"
                             size="sm"
                             onClick={(e) => { e.stopPropagation(); toggleRead(msg); }}
                           >
                             {msg.isRead ? t('markAsUnread') : t('markAsRead')}
                           </Button>
-                          <Button
+                          <Button data-pm-write-resource="messages"
                             variant="outline"
                             size="sm"
                             className="text-destructive hover:text-destructive"

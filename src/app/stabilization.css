@@ -23,3 +23,16 @@
   --chart-4: 280 76% 65%;
   --chart-5: 340 82% 60%;
 }
+
+/* UI visibility mirrors the server-side role matrix. The API remains authoritative. */
+html[data-pm-role='viewer'] [data-pm-write-resource] {
+  display: none !important;
+}
+
+html[data-pm-role='maintenance'] [data-pm-write-resource]:not([data-pm-write-resource='maintenance']):not([data-pm-write-resource='messages']) {
+  display: none !important;
+}
+
+html[data-pm-role='accountant'] [data-pm-write-resource]:not([data-pm-write-resource='tenants']):not([data-pm-write-resource='leases']):not([data-pm-write-resource='payments']):not([data-pm-write-resource='messages']) {
+  display: none !important;
+}

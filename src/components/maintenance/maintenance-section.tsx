@@ -281,7 +281,7 @@ export default function MaintenanceSection() {
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={handleOpenAdd}><Plus className="h-4 w-4 me-2" />{t('addRequest')}</Button>
+            <Button data-pm-write-resource="maintenance" onClick={handleOpenAdd}><Plus className="h-4 w-4 me-2" />{t('addRequest')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -381,7 +381,7 @@ export default function MaintenanceSection() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDialogOpen(false)}>{tc('cancel')}</Button>
-              <Button onClick={handleSubmit} disabled={submitting || !form.propertyId || !form.title}>
+              <Button data-pm-write-resource="maintenance" onClick={handleSubmit} disabled={submitting || !form.propertyId || !form.title}>
                 {submitting ? tc('loading') : tc('save')}
               </Button>
             </DialogFooter>
@@ -397,7 +397,7 @@ export default function MaintenanceSection() {
               <LayoutList className="h-4 w-4" />
               {t('listView')}
             </TabsTrigger>
-            <TabsTrigger value="board" className="gap-1.5">
+            <TabsTrigger data-pm-write-resource="maintenance" value="board" className="gap-1.5">
               <Kanban className="h-4 w-4" />
               {t('boardView')}
             </TabsTrigger>
@@ -413,7 +413,7 @@ export default function MaintenanceSection() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{tc('cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction data-pm-write-resource="maintenance" onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {tc('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -549,11 +549,11 @@ export default function MaintenanceSection() {
                     </div>
                   )}
                   <div className="flex items-center justify-end gap-1 border-t pt-3">
-                    <Button variant="ghost" size="sm" className="h-9 gap-1" onClick={() => handleOpenEdit(r)}>
+                    <Button data-pm-write-resource="maintenance" variant="ghost" size="sm" className="h-9 gap-1" onClick={() => handleOpenEdit(r)}>
                       <Pencil className="h-3.5 w-3.5" />
                       <span className="text-xs">{tc('edit')}</span>
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-9 gap-1 text-destructive hover:text-destructive" onClick={() => setDeleteId(r.id)}>
+                    <Button data-pm-write-resource="maintenance" variant="ghost" size="sm" className="h-9 gap-1 text-destructive hover:text-destructive" onClick={() => setDeleteId(r.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                       <span className="text-xs">{tc('delete')}</span>
                     </Button>

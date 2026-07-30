@@ -235,7 +235,7 @@ export default function TenantsSection() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={exportCsv} disabled={tenants.length === 0}><Download className="h-4 w-4 me-2" />{tc('exportCsv')}</Button>
-          <Button onClick={openAddDialog}><Plus className="h-4 w-4 me-2" />{t('addTenant')}</Button>
+          <Button data-pm-write-resource="tenants" onClick={openAddDialog}><Plus className="h-4 w-4 me-2" />{t('addTenant')}</Button>
         </div>
       </div>
 
@@ -279,7 +279,7 @@ export default function TenantsSection() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>{tc('cancel')}</Button>
-            <Button onClick={handleSubmit} disabled={submitting || !form.name || !form.email}>
+            <Button data-pm-write-resource="tenants" onClick={handleSubmit} disabled={submitting || !form.name || !form.email}>
               {submitting ? tc('loading') : tc('save')}
             </Button>
           </DialogFooter>
@@ -396,7 +396,7 @@ export default function TenantsSection() {
                   <div className="flex items-center gap-1">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEditDialog(tn); }}>
+                        <Button data-pm-write-resource="tenants" variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEditDialog(tn); }}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       </TooltipTrigger>
@@ -404,7 +404,7 @@ export default function TenantsSection() {
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(tn); }}>
+                        <Button data-pm-write-resource="tenants" variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteTarget(tn); }}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </TooltipTrigger>
@@ -469,7 +469,7 @@ export default function TenantsSection() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{tc('cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction data-pm-write-resource="tenants" onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
               {tc('delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
