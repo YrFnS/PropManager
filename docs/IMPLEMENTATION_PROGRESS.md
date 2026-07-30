@@ -12,14 +12,14 @@ The stabilization branch is being completed in validated phases.
 - Immutable payment void and refund adjustments
 - Net-cash reporting after refunds
 - Payment lifecycle tests and validation
+- Role-aware finance screens and global quick actions
+- Server-hydrated permission context with organization switching preserved
 
 ## In progress
 
-- Role-aware finance screens and global quick actions
-- Preserving server-hydrated sessions and organization switching while adding UI permissions
+- Role-aware mutation visibility across Properties, Units, Tenants, Maintenance, and Messages
 
 ## Next
 
-- Complete role-aware mutation visibility across legacy screens
 - Add browser smoke tests and migration rehearsal
 - Remove temporary phase automation before review
