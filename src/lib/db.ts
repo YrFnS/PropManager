@@ -12,6 +12,7 @@ const ORGANIZATION_SCOPED_MODELS = new Set<string>([
   'Tenant',
   'Lease',
   'Payment',
+  'PaymentAdjustment',
   'MaintenanceRequest',
   'Message',
   'ActivityLog',
