@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -23,41 +23,11 @@ jobs:
       ENABLE_AI_COPILOT: "false"
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: agent/stabilize-core-workflows
-          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - name: Apply organization-aware currency and date formatting
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/prepare-organization-formatting-transformer.py
-          python3 scripts/apply-organization-formatting.py
-          rm scripts/prepare-organization-formatting-transformer.py scripts/apply-organization-formatting.py
-          touch /tmp/formatting-phase-applied
-          git diff --check
       - run: bun ci
       - run: bun run db:generate
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run build
-      - name: Publish validated organization formatting phase
-        if: ${{ always() }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ ! -f /tmp/formatting-phase-applied ]; then
-            exit 0
-          fi
-          if [ "${{ job.status }}" != "success" ]; then
-            echo "Validation failed; refusing to publish."
-            exit 1
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "fix: use organization currency and timezone across financial UI [formatting applied]"
-          git push origin HEAD:agent/stabilize-core-workflows
