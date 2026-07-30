@@ -120,9 +120,9 @@ SQL
 # Apply the first idempotent stabilization migration to the populated legacy DB,
 # register it, and then let Prisma deploy the later migrations normally.
 psql "${LEGACY_PSQL_URL}" -v ON_ERROR_STOP=1 \
-  -f prisma/migrations/20260729_stabilize_relations/migration.sql
+  -f prisma/migrations/20260729_0001_stabilize_relations/migration.sql
 DATABASE_URL="${LEGACY_DATABASE_URL}" bunx prisma migrate resolve \
-  --applied 20260729_stabilize_relations
+  --applied 20260729_0001_stabilize_relations
 DATABASE_URL="${LEGACY_DATABASE_URL}" bun run db:migrate:deploy
 DATABASE_URL="${LEGACY_DATABASE_URL}" bunx prisma migrate status
 
