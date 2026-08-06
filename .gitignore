@@ -39,3 +39,5 @@ perf-results/
 
 # Package manager locks (project uses bun)
 package-lock.json
+.vercel
+.env*
