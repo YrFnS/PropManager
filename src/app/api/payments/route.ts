@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { apiError, getPagination, requestRateLimit } from '@/lib/api';
+import { apiError, getPagination, parseJsonRequest, requestRateLimit } from '@/lib/api';
 import { auditEntry } from '@/lib/audit';
 import { moneyDecimal, moneyNumber } from '@/lib/money';
 import { LOCKED_PAYMENT_STATUSES, netCollectedAmount, refundTotal } from '@/lib/payment-ledger';
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
       stats,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
-    response.headers.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10');
+    response.headers.set('Cache-Control', 'private, no-store');
     return response;
   } catch (error) {
     console.error('Payments GET error:', error);
@@ -85,7 +85,8 @@ export async function POST(request: NextRequest) {
   try {
     const limitResult = requestRateLimit(request, 'payments:write', { maxRequests: 90 });
     if (!limitResult.success) return apiError('Too many requests', 429);
-    const body = await request.json();
+    const body = await parseJsonRequest(request);
+    if (body === undefined) return apiError('Invalid request body', 400);
     const parsed = paymentSchema.safeParse(body);
     if (!parsed.success) return apiError('Validation failed', 400, parsed.error.issues);
     const data = parsed.data;
@@ -134,7 +135,8 @@ export async function PUT(request: NextRequest) {
   try {
     const limitResult = requestRateLimit(request, 'payments:write', { maxRequests: 90 });
     if (!limitResult.success) return apiError('Too many requests', 429);
-    const body = await request.json();
+    const body = await parseJsonRequest(request);
+    if (body === undefined) return apiError('Invalid request body', 400);
     const parsed = paymentUpdateSchema.safeParse(body);
     if (!parsed.success) return apiError('Validation failed', 400, parsed.error.issues);
     const data = parsed.data;

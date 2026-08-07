@@ -8,15 +8,16 @@ describe('role permissions', () => {
     expect(canWriteResource('owner', 'users')).toBe(true);
   });
 
-  test('accountant is limited to finance-adjacent workflows', () => {
+  test('accountant is limited to payment workflows', () => {
     expect(canWriteResource('accountant', 'payments')).toBe(true);
-    expect(canWriteResource('accountant', 'leases')).toBe(true);
+    expect(canWriteResource('accountant', 'leases')).toBe(false);
     expect(canWriteResource('accountant', 'properties')).toBe(false);
     expect(canAdministerOrganization('accountant')).toBe(false);
   });
 
   test('maintenance and viewer roles cannot mutate finance', () => {
     expect(canWriteResource('maintenance', 'maintenance')).toBe(true);
+    expect(canWriteResource('maintenance', 'messages')).toBe(false);
     expect(canWriteResource('maintenance', 'payments')).toBe(false);
     expect(canWriteResource('viewer', 'messages')).toBe(false);
     expect(canWriteResource(undefined, 'payments')).toBe(false);

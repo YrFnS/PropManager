@@ -8,6 +8,14 @@ export function apiError(message: string, status: number, details?: unknown) {
   );
 }
 
+export async function parseJsonRequest(request: Request) {
+  try {
+    return await request.json();
+  } catch {
+    return undefined;
+  }
+}
+
 export function getPagination(searchParams: URLSearchParams, defaultLimit = 100, maxLimit = 200) {
   const pageValue = Number.parseInt(searchParams.get('page') || '1', 10);
   const limitValue = Number.parseInt(searchParams.get('limit') || String(defaultLimit), 10);

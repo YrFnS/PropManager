@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
       notifications: notifications.slice(0, 8),
       unreadCount: unreadMessageCount,
     });
-    response.headers.set('Cache-Control', 'private, max-age=10, stale-while-revalidate=20');
+    response.headers.set('Cache-Control', 'private, no-store');
     return response;
   } catch (error) {
     console.error('Notifications API error:', error);

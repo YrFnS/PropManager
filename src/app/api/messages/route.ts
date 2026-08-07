@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { parseJsonRequest } from '@/lib/api';
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimit, messageSchema, sanitizeString } from '@/lib/validation';
 
@@ -44,7 +45,7 @@ export async function GET(request: NextRequest) {
         totalPages: Math.ceil(total / limit),
       },
     });
-    response.headers.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10');
+    response.headers.set('Cache-Control', 'private, no-store');
     return response;
   } catch (error) {
     console.error('Messages API error:', error);
@@ -59,7 +60,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
-    const body = await request.json();
+    const body = await parseJsonRequest(request);
+    if (body === undefined) return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
 
     const parsed = messageSchema.safeParse(body);
     if (!parsed.success) {
@@ -92,7 +94,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
-    const body = await request.json();
+    const body = await parseJsonRequest(request);
+    if (body === undefined) return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
 
     const parsed = messageSchema.safeParse(body);
     if (!parsed.success) {
@@ -137,7 +140,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
     }
 
-    const body = await request.json();
+    const body = await parseJsonRequest(request);
+    if (body === undefined) return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     const { id, isRead, markAllRead } = body;
 
     if (markAllRead) {

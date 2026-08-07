@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
       },
       propertyScores,
     });
-    response.headers.set('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
+    response.headers.set('Cache-Control', 'private, no-store');
     return response;
   } catch (error) {
     console.error('Health score error:', error);

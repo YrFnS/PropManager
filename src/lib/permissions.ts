@@ -7,8 +7,8 @@ export type AppResource =
 const WRITE_RESOURCES: Record<AppRole, readonly AppResource[]> = {
   owner: ['properties', 'units', 'tenants', 'leases', 'payments', 'maintenance', 'messages', 'settings', 'organization', 'users'],
   manager: ['properties', 'units', 'tenants', 'leases', 'payments', 'maintenance', 'messages'],
-  accountant: ['tenants', 'leases', 'payments', 'messages'],
-  maintenance: ['maintenance', 'messages'],
+  accountant: ['payments'],
+  maintenance: ['maintenance'],
   viewer: [],
 };
 

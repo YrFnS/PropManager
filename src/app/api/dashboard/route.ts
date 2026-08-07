@@ -241,7 +241,7 @@ export async function GET(request: NextRequest) {
       revenueData,
       propertyRevenueData,
     });
-    response.headers.set('Cache-Control', 'private, max-age=15, stale-while-revalidate=30');
+    response.headers.set('Cache-Control', 'private, no-store');
     return response;
   } catch (error) {
     console.error('Dashboard API error:', error);

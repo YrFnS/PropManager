@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { apiError, getPagination, isPrismaError, requestRateLimit } from '@/lib/api';
+import { apiError, getPagination, isPrismaError, parseJsonRequest, requestRateLimit } from '@/lib/api';
 import { auditEntry } from '@/lib/audit';
 import { moneyToNumber } from '@/lib/money';
 import {
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
       data,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
-    response.headers.set('Cache-Control', 'private, max-age=5, stale-while-revalidate=10');
+    response.headers.set('Cache-Control', 'private, no-store');
     return response;
   } catch (error) {
     console.error('Properties GET error:', error);
@@ -129,7 +129,8 @@ export async function POST(request: NextRequest) {
     const limitResult = requestRateLimit(request, 'properties:write', { maxRequests: 60 });
     if (!limitResult.success) return apiError('Too many requests', 429);
 
-    const body = await request.json();
+    const body = await parseJsonRequest(request);
+    if (body === undefined) return apiError('Invalid request body', 400);
     const parsed = propertySchema.safeParse(body);
     if (!parsed.success) return apiError('Validation failed', 400, parsed.error.issues);
 
@@ -178,7 +179,8 @@ export async function PUT(request: NextRequest) {
     const limitResult = requestRateLimit(request, 'properties:write', { maxRequests: 60 });
     if (!limitResult.success) return apiError('Too many requests', 429);
 
-    const body = await request.json();
+    const body = await parseJsonRequest(request);
+    if (body === undefined) return apiError('Invalid request body', 400);
     const parsed = propertyUpdateSchema.safeParse(body);
     if (!parsed.success) return apiError('Validation failed', 400, parsed.error.issues);
     const data = parsed.data;
