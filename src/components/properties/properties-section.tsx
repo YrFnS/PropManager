@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -273,33 +273,36 @@ export default function PropertiesSection() {
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editingId ? t('editProperty') : t('addProperty')}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editingId ? t('editProperty') : t('addProperty')}</DialogTitle>
+            <DialogDescription className="sr-only">{t('propertyDetails')}</DialogDescription>
+          </DialogHeader>
           <div className="grid gap-3 py-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><Label>{t('propertyName')}</Label><Input value={form.name || ''} onChange={e => updateForm('name', e.target.value)} /></div>
-              <div><Label>{t('propertyNameAr')}</Label><Input dir="rtl" value={form.nameAr || ''} onChange={e => updateForm('nameAr', e.target.value)} /></div>
+              <div><Label>{t('propertyName')}</Label><Input aria-label={t('propertyName')} value={form.name || ''} onChange={e => updateForm('name', e.target.value)} /></div>
+              <div><Label>{t('propertyNameAr')}</Label><Input aria-label={t('propertyNameAr')} dir="rtl" value={form.nameAr || ''} onChange={e => updateForm('nameAr', e.target.value)} /></div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><Label>{t('address')}</Label><Input value={form.address || ''} onChange={e => updateForm('address', e.target.value)} /></div>
-              <div><Label>{t('addressAr')}</Label><Input dir="rtl" value={form.addressAr || ''} onChange={e => updateForm('addressAr', e.target.value)} /></div>
+              <div><Label>{t('address')}</Label><Input aria-label={t('address')} value={form.address || ''} onChange={e => updateForm('address', e.target.value)} /></div>
+              <div><Label>{t('addressAr')}</Label><Input aria-label={t('addressAr')} dir="rtl" value={form.addressAr || ''} onChange={e => updateForm('addressAr', e.target.value)} /></div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><Label>{t('city')}</Label><Input value={form.city || ''} onChange={e => updateForm('city', e.target.value)} /></div>
-              <div><Label>{t('cityAr')}</Label><Input dir="rtl" value={form.cityAr || ''} onChange={e => updateForm('cityAr', e.target.value)} /></div>
+              <div><Label>{t('city')}</Label><Input aria-label={t('city')} value={form.city || ''} onChange={e => updateForm('city', e.target.value)} /></div>
+              <div><Label>{t('cityAr')}</Label><Input aria-label={t('cityAr')} dir="rtl" value={form.cityAr || ''} onChange={e => updateForm('cityAr', e.target.value)} /></div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div><Label>{t('state')}</Label><Input value={form.state || ''} onChange={e => updateForm('state', e.target.value)} /></div>
-              <div><Label>{t('zipCode')}</Label><Input value={form.zipCode || ''} onChange={e => updateForm('zipCode', e.target.value)} /></div>
-              <div><Label>{t('type')}</Label><Select value={form.type || 'residential'} onValueChange={v => updateForm('type', v)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="residential">{t('residential')}</SelectItem><SelectItem value="commercial">{t('commercial')}</SelectItem><SelectItem value="mixed">{t('mixed')}</SelectItem></SelectContent></Select></div>
+              <div><Label>{t('state')}</Label><Input aria-label={t('state')} value={form.state || ''} onChange={e => updateForm('state', e.target.value)} /></div>
+              <div><Label>{t('zipCode')}</Label><Input aria-label={t('zipCode')} value={form.zipCode || ''} onChange={e => updateForm('zipCode', e.target.value)} /></div>
+              <div><Label>{t('type')}</Label><Select value={form.type || 'residential'} onValueChange={v => updateForm('type', v)}><SelectTrigger aria-label={t('type')}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="residential">{t('residential')}</SelectItem><SelectItem value="commercial">{t('commercial')}</SelectItem><SelectItem value="mixed">{t('mixed')}</SelectItem></SelectContent></Select></div>
             </div>
-            <div><Label>{t('description')}</Label><Textarea value={form.description || ''} onChange={e => updateForm('description', e.target.value)} /></div>
+            <div><Label>{t('description')}</Label><Textarea aria-label={t('description')} value={form.description || ''} onChange={e => updateForm('description', e.target.value)} /></div>
             <Separator className="my-2" />
             <p className="text-sm font-medium">{t('manager')}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><Label>{t('managerName')}</Label><Input value={form.manager?.name || ''} onChange={e => updateForm('manager', { ...form.manager, name: e.target.value })} /></div>
-              <div><Label>{t('managerEmail')}</Label><Input type="email" value={form.manager?.email || ''} onChange={e => updateForm('manager', { ...form.manager, email: e.target.value })} /></div>
+              <div><Label>{t('managerName')}</Label><Input aria-label={t('managerName')} value={form.manager?.name || ''} onChange={e => updateForm('manager', { ...form.manager, name: e.target.value })} /></div>
+              <div><Label>{t('managerEmail')}</Label><Input aria-label={t('managerEmail')} type="email" value={form.manager?.email || ''} onChange={e => updateForm('manager', { ...form.manager, email: e.target.value })} /></div>
             </div>
-            <div><Label>{t('managerPhone')}</Label><Input value={form.manager?.phone || ''} onChange={e => updateForm('manager', { ...form.manager, phone: e.target.value })} /></div>
+            <div><Label>{t('managerPhone')}</Label><Input aria-label={t('managerPhone')} value={form.manager?.phone || ''} onChange={e => updateForm('manager', { ...form.manager, phone: e.target.value })} /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>{tc('cancel')}</Button>
