@@ -213,7 +213,7 @@ export default function PropertiesSection() {
               : 'border-s-purple-500';
           return (
           <Card key={p.id} className={`group hover:-translate-y-1 hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden rounded-xl border border-border/50 border-s-4 ${accentBorder}`} onClick={() => openDetailSheet(p.id)}>
-            {/* Property Image Placeholder */}
+            {/* Property image with a deterministic geometry fallback for missing URLs. */}
             <PropertyImage
               type={p.type || 'residential'}
               name={isAr && p.nameAr ? p.nameAr : p.name}

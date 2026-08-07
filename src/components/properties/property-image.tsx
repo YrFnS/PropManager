@@ -50,7 +50,16 @@ export default function PropertyImage({ type, name, image, className }: Property
     >
       {image && (
         <>
-          <img src={image} alt={name || 'Property'} className="absolute inset-0 h-full w-full object-cover" />
+          <img
+            src={image}
+            alt={name || 'Property'}
+            width={1200}
+            height={800}
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/5 to-transparent" />
         </>
       )}

@@ -98,7 +98,7 @@ async function main() {
 			"Dubai",
 			"commercial",
 			2,
-			"https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1200&q=80",
+			"https://images.pexels.com/photos/37347/office-sitting-room-executive-sitting.jpg?auto=compress&cs=tinysrgb&w=1200",
 		],
 		[
 			"Empty Lot – Phase Ω",
