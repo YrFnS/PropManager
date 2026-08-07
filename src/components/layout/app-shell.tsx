@@ -509,6 +509,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 variant="ghost"
                 size="icon"
                 className="w-full"
+                aria-label={tc('switchLanguage')}
                 onClick={handleLanguageSwitch}
               >
                 <Languages className="h-4 w-4" />
@@ -517,6 +518,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 variant="ghost"
                 size="icon"
                 className="w-full"
+                aria-label={tc('toggleDarkMode')}
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               >
                 {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -539,6 +541,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             size="icon"
             onClick={toggleSidebar}
             className="shrink-0"
+            aria-label={tc('toggleSidebar')}
           >
             <Menu className="h-5 w-5" />
           </Button>
@@ -578,6 +581,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
+                aria-label={tc('switchLanguage')}
                 onClick={handleLanguageSwitch}
               >
                 <Languages className="h-4 w-4" />
@@ -586,6 +590,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
+                aria-label={tc('toggleDarkMode')}
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               >
                 {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}

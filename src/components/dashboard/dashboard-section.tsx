@@ -220,7 +220,7 @@ export default function DashboardSection() {
           <p className="text-sm text-muted-foreground mt-0.5">{t('welcome')}</p>
         </div>
         <Select value={period} onValueChange={setPeriod}>
-          <SelectTrigger className="w-[140px] h-8 text-xs">
+          <SelectTrigger aria-label={tc('filter')} className="w-[140px] h-8 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
