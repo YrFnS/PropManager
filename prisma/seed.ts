@@ -2,7 +2,7 @@ import type { Payment, Property, Tenant, Unit } from "@prisma/client";
 import { db } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 
-const DEMO_PASSWORD = "PropManager-Demo-2026!";
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD?.trim();
 const now = new Date("2026-08-06T12:00:00.000Z");
 const date = (value: string) => new Date(`${value}T12:00:00.000Z`);
 
@@ -43,6 +43,7 @@ async function main() {
 		}),
 	]);
 
+	if (!DEMO_PASSWORD) throw new Error("DEMO_PASSWORD is required to seed demo users.");
 	const passwordHash = await hashPassword(DEMO_PASSWORD);
 	const accounts = [
 		["owner@propmanager.demo", "Demo Owner", "owner", true],
