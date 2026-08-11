@@ -29,10 +29,10 @@ html[data-pm-role='viewer'] [data-pm-write-resource] {
   display: none !important;
 }
 
-html[data-pm-role='maintenance'] [data-pm-write-resource]:not([data-pm-write-resource='maintenance']):not([data-pm-write-resource='messages']) {
+html[data-pm-role='maintenance'] [data-pm-write-resource]:not([data-pm-write-resource='maintenance']) {
   display: none !important;
 }
 
-html[data-pm-role='accountant'] [data-pm-write-resource]:not([data-pm-write-resource='tenants']):not([data-pm-write-resource='leases']):not([data-pm-write-resource='payments']):not([data-pm-write-resource='messages']) {
+html[data-pm-role='accountant'] [data-pm-write-resource]:not([data-pm-write-resource='payments']) {
   display: none !important;
 }
