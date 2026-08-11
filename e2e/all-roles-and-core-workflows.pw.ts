@@ -375,7 +375,7 @@ async function assertFixtureInBrowser(page: Page, fixture: Fixture) {
   for (const expectation of expectations) {
     await page.goto(`/en/${expectation.section}`, { waitUntil: 'domcontentloaded' });
     await expect(
-      page.getByText(expectation.text).first(),
+      page.getByText(expectation.text, { exact: true }).filter({ visible: true }).first(),
       `${expectation.section} renders its core fixture`,
     ).toBeVisible();
   }
