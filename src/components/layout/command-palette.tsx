@@ -128,7 +128,6 @@ export function CommandPalette() {
   // Debounced search + reset on close
   useEffect(() => {
     if (!commandPaletteOpen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearchQuery('');
       setSearchResults(null);
       return;
