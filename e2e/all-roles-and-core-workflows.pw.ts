@@ -96,7 +96,6 @@ const attributedControlResources = [
   'properties',
   'units',
   'tenants',
-  'leases',
   'maintenance',
   'messages',
 ] as const satisfies readonly WriteResource[];
@@ -232,11 +231,22 @@ async function assertUiPermissions(page: Page, role: AppRole) {
       .poll(() => controls.count(), { message: `${resource} exposes tagged write controls` })
       .toBeGreaterThan(0);
 
+    const visibleControls = controls.filter({ visible: true });
     if (roleWrites[role].includes(resource)) {
-      await expect(controls.first(), `${role} can write ${resource}`).toBeVisible();
+      await expect
+        .poll(() => visibleControls.count(), { message: `${role} can write ${resource}` })
+        .toBeGreaterThan(0);
     } else {
-      await expect(controls.first(), `${role} cannot write ${resource}`).toBeHidden();
+      await expect(visibleControls, `${role} cannot write ${resource}`).toHaveCount(0);
     }
+  }
+
+  await page.goto('/en/leases', { waitUntil: 'domcontentloaded' });
+  const createLease = page.getByRole('button', { name: /create lease/i });
+  if (roleWrites[role].includes('leases')) {
+    await expect(createLease, `${role} lease write control`).toBeVisible();
+  } else {
+    await expect(createLease, `${role} lease write control`).toHaveCount(0);
   }
 
   await page.goto('/en/payments', { waitUntil: 'domcontentloaded' });
@@ -285,7 +295,9 @@ async function createCoreFixture(page: Page, context: BrowserContext, runId: str
   const propertyResponse = await propertyResponsePromise;
   expect(propertyResponse.status(), 'property created through the browser').toBe(201);
   const property = (await propertyResponse.json()) as { id: string };
-  await expect(page.getByText(propertyName).first()).toBeVisible();
+  await expect(
+    page.getByText(propertyName, { exact: true }).filter({ visible: true }).first(),
+  ).toBeVisible();
 
   const unitNumber = `E2E-${runId}`;
   const unit = await createJson<{ id: string }>(context.request, '/api/units', {
@@ -426,7 +438,9 @@ test('all roles can complete their allowed workflows and are blocked everywhere 
         category: 'general',
       });
       await page.goto('/en/messages');
-      await expect(page.getByText(subject).first()).toBeVisible();
+      await expect(
+        page.getByText(subject, { exact: true }).filter({ visible: true }).first(),
+      ).toBeVisible();
     }
 
     if (account.role === 'accountant') {
@@ -460,7 +474,9 @@ test('all roles can complete their allowed workflows and are blocked everywhere 
         category: 'electrical',
       });
       await page.goto('/en/maintenance');
-      await expect(page.getByText(title).first()).toBeVisible();
+      await expect(
+        page.getByText(title, { exact: true }).filter({ visible: true }).first(),
+      ).toBeVisible();
     }
 
     if (!isOwner) await context.close();
