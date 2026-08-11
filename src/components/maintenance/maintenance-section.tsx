@@ -136,7 +136,6 @@ export default function MaintenanceSection() {
         })
         .catch(() => { if (!cancelled) setPropertyUnits([]); });
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPropertyUnits([]);
     }
     return () => { cancelled = true; };
