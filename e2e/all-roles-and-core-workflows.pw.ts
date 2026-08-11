@@ -273,7 +273,7 @@ async function createCoreFixture(page: Page, context: BrowserContext, runId: str
   const propertyName = `E2E Property ${runId}`;
   await page.goto('/en/properties');
   await page.getByRole('button', { name: 'Add Property' }).first().click();
-  await page.getByLabel('Property Name').fill(propertyName);
+  await page.getByLabel('Property Name', { exact: true }).fill(propertyName);
   await page.getByLabel('Address', { exact: true }).fill('100 E2E Avenue');
   await page.getByLabel('City', { exact: true }).fill('Baghdad');
 
