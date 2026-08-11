@@ -20,7 +20,7 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
   webServer: {
-    command: 'bun run dev',
+    command: process.env.CI ? 'bun run start' : 'bun run dev',
     url: 'http://localhost:3000/en/login',
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

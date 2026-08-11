@@ -143,7 +143,6 @@ export default function PropertyDetailSheet({
 
   useEffect(() => {
     if (!open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setData(null);
       return;
     }
