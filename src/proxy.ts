@@ -7,6 +7,7 @@ import {
   SESSION_COOKIE_NAME,
   verifySessionToken,
 } from '@/lib/auth';
+import { hasValidRequestOrigin } from '@/lib/request-origin';
 
 const intlMiddleware = createMiddleware(routing);
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
@@ -38,10 +39,14 @@ function withSecurityHeaders(response: NextResponse) {
 }
 
 function hasValidOrigin(request: NextRequest) {
-  if (SAFE_METHODS.has(request.method)) return true;
-  const origin = request.headers.get('origin');
-  if (!origin) return true;
-  return origin === request.nextUrl.origin;
+  return hasValidRequestOrigin({
+    method: request.method,
+    originHeader: request.headers.get('origin'),
+    hostHeader: request.headers.get('host'),
+    forwardedHostHeader: request.headers.get('x-forwarded-host'),
+    forwardedProtoHeader: request.headers.get('x-forwarded-proto'),
+    requestOrigin: request.nextUrl.origin,
+  });
 }
 
 function getRequiredRoles(pathname: string, method: string): readonly AppRole[] {
